@@ -1,0 +1,14 @@
+/Pipfile.lock
+/Pipfile
+/django-nodejs-backend/core/secrets.py
+/django-nodejs-backend/static/src/js/package-lock.json
+/django-nodejs-backend/static/src/js/test_send.js
+/django-nodejs-backend/tipbot/migrations/
+/django-nodejs-backend/db.sqlite3
+/django-nodejs-backend/package-lock.json
+/django-nodejs-backend/vtm/migrations/
+/telegram-bot/keys.py
+/telegram-bot/main.log
+/telegram-bot/__pycache__/
+.idea/
+.gitignore
