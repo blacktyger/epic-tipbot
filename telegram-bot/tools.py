@@ -34,6 +34,33 @@ def parse_user_and_message(message: types.Message) -> tuple:
     return user, msg
 
 
+def parse_donation_command(message: types.Message) -> dict:
+    """Return data for quick developer donation"""
+
+    sender, _ = parse_user_and_message(message)
+    receiver = {'username': 'blacktyg3r'}
+
+    # Validate amount
+    amount = get_cmd_value(message, index=1)
+    try:
+        amount = float(amount)
+        if amount <= 0:
+            return {'error': 1, 'msg': 'Wrong amount value', 'data': None}
+    except Exception as e:
+        print(e)
+        return {'error': 1, 'msg': 'Wrong amount value', 'data': None}
+
+    data = {
+        'sender': sender,
+        'receiver': receiver,
+        'amount': amount,
+        'address': None
+        }
+    response = {'error': 0, 'msg': 'Success', 'data': data}
+
+    return response
+
+
 def parse_tip_command(message: types.Message, amount: Union[float, decimal.Decimal, int]) -> dict:
     """Return data for quick transaction (tip)"""
 

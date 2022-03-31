@@ -21,27 +21,36 @@ dp = Dispatcher(bot, storage=storage)
 
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
-COMMANDS = {'start': ['start', 'register', 'create'],
+COMMANDS = {'start': ['start', 'help', ],
+            'create': ['create', 'register'],
             'balance': ['balance', 'bal', ],
             'address': ['address', 'deposit', ],
             'history': ['history', 'transactions', ],
             'send': ['send', 'withdraw', ],
             'cancel': ['cancel'],
-            'help': ['help', ],
+            'donation': ['donation', ],
             'tip': ['tip', ],
             }
+
 
 async def send_message(**kwargs):
     """Helper function for sending messages from bot to TelegramUser"""
     await bot.send_message(
-        **kwargs,  parse_mode=ParseMode.MARKDOWN,
+        **kwargs, parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=True
         )
 
 
-# /------ START/CREATE ACCOUNT HANDLE ------\ #
+# /------ START/HELP HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['start'])
 async def start(message: types.Message):
+    private_chat = message.from_user.id
+    await send_message(text=Tipbot.HELP_STRING, chat_id=private_chat)
+
+
+# /------ CREATE ACCOUNT HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['create'])
+async def create(message: types.Message):
     query = 'users/create'
     full_url = f'{DJANGO_API_URL}/{query}/'
     active_chat = message.chat.id
@@ -165,6 +174,50 @@ async def send(message: types.Message):
             print(response.text)
             msg = f"🔴 Transaction send error"
             await send_message(text=msg, chat_id=private_chat)
+
+
+# /------ DONATION HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['donation'])
+async def donation(message: types.Message):
+    query = 'send_transaction'
+    full_url = f'{TIPBOT_API_URL}/{query}/'
+    private_chat = message.from_user.id
+    data = tools.parse_donation_command(message)
+
+    if not data['error']:
+        response = requests.post(url=full_url, data=json.dumps(data['data']))
+
+        if response.status_code == 200:
+            response = json.loads(response.content)
+
+            if not response['error']:
+                explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
+                receiver = data['data']['receiver']['username']
+                private_msg = f"✅ Donation of {tools.float_to_str(data['data']['amount'])} EPIC\n" \
+                              f"▫️ [Donation details]({explorer_url})"
+                receiver_msg = f"💸 {data['data']['amount']} EPIC from *@{data['data']['sender']['username']}*"
+
+                # Send tx confirmation to sender's private chat
+                if not response['data']['receiver']['is_bot']:
+                    await send_message(text=private_msg, chat_id=private_chat)
+
+                # Send notification to receiver's private chat
+                if 'receiver' in response['data'].keys():
+                    if not response['data']['receiver']['is_bot']:
+                        await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
+
+            else:
+                msg = f"🔴 {response['msg']}"
+                await send_message(text=msg, chat_id=private_chat)
+        else:
+            print(response.status_code)
+            msg = f"🔴 Donation send error"
+            await send_message(text=msg, chat_id=private_chat)
+
+    else:
+        print(data['msg'])
+        msg = f"🔴 {data['msg']}"
+        await send_message(text=msg, chat_id=private_chat)
 
 
 # /------ TIP EPIC HANDLE ------\ #
