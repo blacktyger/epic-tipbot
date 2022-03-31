@@ -135,7 +135,7 @@ def send_transaction(request):
         tx.save()
 
         tx = TransactionSerializer(tx)
-        data = {'transaction': tx.data}
+        payload = {'transaction': tx.data}
 
         if data['receiver']:
             # Start thread to update receiver balance in background
@@ -146,9 +146,9 @@ def send_transaction(request):
 
             # Serialize TelegramUser instances
             receiver = TelegramUserSerializer(receiver)
-            data['receiver'] = receiver.data
+            payload['receiver'] = receiver.data
 
-        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': data}
+        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': payload}
     else:
         # Update transaction status in database and prepare failed response
         tx.status = 'failed'

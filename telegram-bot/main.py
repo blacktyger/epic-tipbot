@@ -74,7 +74,7 @@ async def address(message: types.Message):
     response = json.loads(response.content)
 
     if not response['error']:
-        msg = f"🏷  *Vite Deposit Address:*\n" \
+        msg = f"🏷  *Tipbot Wallet Deposit Address:*\n" \
               f"`{response['data']}`\n"
     else:
         msg = f"🔴 {response['msg']}"
