@@ -1,4 +1,4 @@
-import express, { query } from 'express';
+import express from 'express';
 import bodyParser from 'body-parser';
 import { 
     sleep,

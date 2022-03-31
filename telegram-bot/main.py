@@ -156,7 +156,8 @@ async def send(message: types.Message):
                 await send_message(text=private_msg, chat_id=private_chat)
 
                 # Send notification to receiver's private chat
-                await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
+                if 'receiver' in response['data'].keys():
+                    await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
             else:
                 msg = f"🟡 {response['msg']}"
                 await send_message(text=msg, chat_id=private_chat)
@@ -196,8 +197,9 @@ async def tip(message: types.Message):
                     await send_message(text=private_msg, chat_id=private_chat)
 
                 # Send notification to receiver's private chat
-                if not response['data']['receiver']['is_bot']:
-                    await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
+                if 'receiver' in response['data'].keys():
+                    if not response['data']['receiver']['is_bot']:
+                        await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
 
                 # Replace original /tip user message with tip confirmation in active channel
                 await message.delete()

@@ -134,18 +134,21 @@ def send_transaction(request):
         tx.status = 'success'
         tx.save()
 
-        # Start thread to update receiver balance in background
-        receiver_update = threading.Thread(target=utils.receive_transactions, args=[receiver_wallet])
-        print(f"Starting update wallet {receiver_wallet} thread...")
-        receiver_update.start()
-        receiver_update.join()
-
-        # Serialize Transaction and TelegramUser instances for success response
-        receiver = TelegramUserSerializer(receiver)
         tx = TransactionSerializer(tx)
-        data = {'transaction': tx.data, 'receiver': receiver.data}
-        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': data}
+        data = {'transaction': tx.data}
 
+        if data['receiver']:
+            # Start thread to update receiver balance in background
+            receiver_update = threading.Thread(target=utils.receive_transactions, args=[receiver_wallet])
+            print(f"Starting update wallet {receiver_wallet} thread...")
+            receiver_update.start()
+            receiver_update.join()
+
+            # Serialize TelegramUser instances
+            receiver = TelegramUserSerializer(receiver)
+            data['receiver'] = receiver.data
+
+        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': data}
     else:
         # Update transaction status in database and prepare failed response
         tx.status = 'failed'
