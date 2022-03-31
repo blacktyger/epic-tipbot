@@ -35,11 +35,11 @@ def parse_user_and_message(message: types.Message) -> tuple:
 
 
 def parse_tip_command(message: types.Message, amount: Union[float, decimal.Decimal, int]) -> dict:
-    """Return data for quick transaction"""
+    """Return data for quick transaction (tip)"""
 
     # Check if command have enough params
     if len(message.entities) < 2:
-        response = {'error': 1, 'msg': 'Receiver not recognized', 'data': None}
+        response = {'error': 1, 'msg': 'Invalid recipient username.', 'data': None}
 
     elif len(message.entities) == 2:
         sender, _ = parse_user_and_message(message)

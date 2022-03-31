@@ -12,8 +12,8 @@ class TelegramUserView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = TelegramUser.objects.all()
-        user_id = self.request.query_params.get('id')
         username = self.request.query_params.get('username')
+        user_id = self.request.query_params.get('user_id')
 
         if user_id:
             queryset = queryset.filter(id=user_id)

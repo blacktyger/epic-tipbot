@@ -1,8 +1,12 @@
+import threading
+
+from django.db.models import Q
 from django.http import JsonResponse
 from rest_framework import viewsets
 
 import json
 
+from vtm.serializers import TelegramUserSerializer
 from .serializers import WalletSerializer, TransactionSerializer
 from vtm.models import Token, TelegramUser
 from .models import Wallet, Transaction
@@ -39,11 +43,18 @@ class TransactionView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Transaction.objects.all()
+        username = self.request.query_params.get('username')
         user_id = self.request.query_params.get('user_id')
-        print(user_id)
+        address = self.request.query_params.get('address')
+
+        if address:
+            queryset = queryset.filter(Q(sender__address=address) | Q(address=address))
         if user_id:
-            queryset = queryset.filter(user__id=user_id)
-        return queryset
+            queryset = queryset.filter(Q(sender__user__id=user_id) | Q(receiver__user__id=user_id))
+        if username:
+            queryset = queryset.filter(Q(sender__user__username=username) | Q(receiver__user__username=username))
+
+        return queryset.filter(status='success')
 
 
 def send_transaction(request):
@@ -58,7 +69,7 @@ def send_transaction(request):
 
     # If no UserTelegram prompt that sender need to create account
     if not sender:
-        response = {'error': 1, 'msg': f"@{sender.username} account not found", 'data': None}
+        response = {'error': 1, 'msg': f"@{sender.username} have no Tipbot account.", 'data': None}
         return JsonResponse(response)
 
     sender_wallet = Wallet.objects.filter(user__id=data['sender']['id']).first()
@@ -74,7 +85,7 @@ def send_transaction(request):
 
         # If no UserTelegram prompt that receiver need to create account
         if not receiver:
-            response = {'error': 1, 'msg': f"@{data['receiver']['username']} account not found", 'data': None}
+            response = {'error': 1, 'msg': f"@{data['receiver']['username']} have no Tipbot account.", 'data': None}
             return JsonResponse(response)
 
         # If no Receiver Wallet prompt warning
@@ -123,9 +134,21 @@ def send_transaction(request):
         tx.data = {'hash': transaction['data']['hash']}
         tx.status = 'success'
         tx.save()
+
+        # Start thread to update receiver balance in background
+        receiver_update = threading.Thread(target=utils.receive_transactions, args=[receiver_wallet])
+        print(f"Starting update wallet {receiver_wallet} thread...")
+        receiver_update.start()
+        receiver_update.join()
+
+        # Serialize Transaction and TelegramUser instances for success response
+        receiver = TelegramUserSerializer(receiver)
         tx = TransactionSerializer(tx)
-        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': tx.data}
+        data = {'transaction': tx.data, 'receiver': receiver.data}
+        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': data}
+
     else:
+        # Update transaction status in database and prepare failed response
         tx.status = 'failed'
         tx.data = {'error': transaction['msg']}
         tx.save()

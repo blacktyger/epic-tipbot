@@ -24,6 +24,7 @@ TIPBOT_API_URL = Database.TIPBOT_URL
 COMMANDS = {'start': ['start', 'register', 'create'],
             'balance': ['balance', 'bal', ],
             'address': ['address', 'deposit', ],
+            'history': ['history', 'transactions', ],
             'send': ['send', 'withdraw', ],
             'cancel': ['cancel'],
             'help': ['help', ],
@@ -141,19 +142,23 @@ async def send(message: types.Message):
         if response.status_code == 200:
             response = json.loads(response.content)
 
+            # Parse API response
             if not response['error']:
                 command = f"`({message.get_command(pure=True)} operation)`"
-                explorer_url = tools.vitescan_tx_url(response['data']['data']['hash'])
+                explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
                 receiver = data['data']['receiver']['mention'] if data['data']['receiver'] else data['data']['address']
                 private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *{receiver}* " \
                               f"{command if 'withdraw' in command else ''}\n" \
                               f"▫️ [Transaction details (vitescan.io)]({explorer_url})"
-                # public_msg = f"✅ *@{data['data']['sender']['username']}* send {data['data']['amount']} EPIC to *{data['data']['receiver']['mention']}*"
+                receiver_msg = f"{data['data']['amount']} EPIC from *@{data['data']['sender']['username']}*"
 
+                # Send tx confirmation to sender's private chat
                 await send_message(text=private_msg, chat_id=private_chat)
-                # await send_message(text=public_msg, chat_id=active_chat)
+
+                # Send notification to receiver's private chat
+                await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
             else:
-                msg = f"🔴 {response['msg']}"
+                msg = f"🟡 {response['msg']}"
                 await send_message(text=msg, chat_id=private_chat)
         else:
             print(response.text)
@@ -179,14 +184,23 @@ async def tip(message: types.Message):
             response = json.loads(response.content)
 
             if not response['error']:
-                explorer_url = tools.vitescan_tx_url(response['data']['data']['hash'])
+                explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
                 receiver = data['data']['receiver']['username']
                 private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *@{receiver}*\n" \
                               f"▫️ [Tip details]({explorer_url})"
                 public_msg = f"❤️ *@{data['data']['sender']['username']} {tools.float_to_str(data['data']['amount'])} TIP @{data['data']['receiver']['username']}*"
+                receiver_msg = f"💸 {data['data']['amount']} EPIC from *@{data['data']['sender']['username']}*"
 
+                # Send tx confirmation to sender's private chat
+                if not response['data']['receiver']['is_bot']:
+                    await send_message(text=private_msg, chat_id=private_chat)
+
+                # Send notification to receiver's private chat
+                if not response['data']['receiver']['is_bot']:
+                    await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
+
+                # Replace original /tip user message with tip confirmation in active channel
                 await message.delete()
-                await send_message(text=private_msg, chat_id=private_chat)
                 await send_message(text=public_msg, chat_id=active_chat)
             else:
                 msg = f"🔴 {response['msg']}"
@@ -200,6 +214,36 @@ async def tip(message: types.Message):
         print(data['msg'])
         msg = f"🔴 {data['msg']}"
         await send_message(text=msg, chat_id=private_chat)
+
+
+# TODO: History Handle
+# # /------ DISPLAY TX HISTORY HANDLE ------\ #
+# @dp.message_handler(commands=COMMANDS['history'])
+# async def history(message: types.Message):
+#     user_query = 'users'
+#     tx_query = 'transactions'
+#     private_chat = message.from_user.id
+#     user, message_ = tools.parse_user_and_message(message)
+#
+#     # Get UserTelegram Wallet instance to get transaction history
+#     user = requests.get(url=f'{DJANGO_API_URL}/{user_query}/', params={'user_id': user['id']}).json()
+#     user_wallet_address = user[0]['wallet'][0]
+#
+#     # Get transactions for that Wallet
+#     transactions = requests.get(url=f'{DJANGO_API_URL}/{tx_query}/', params={'address': user_wallet_address})
+#     transactions = json.loads(transactions.content)
+#
+#     # Sort transactions
+#     received = [tx for tx in transactions if user_wallet_address in tx['address']]
+#     send = [tx for tx in transactions if user_wallet_address in tx['sender']]
+#
+#     if not response['error']:
+#         msg = f"📄  *Transactions History:*\n" \
+#               f"`{response['data']}`\n"
+#     else:
+#         msg = f"🔴 {response['msg']}"
+#
+#     await send_message(text=msg, chat_id=private_chat)
 
 
 # /------ START MAIN LOOP ------\ #

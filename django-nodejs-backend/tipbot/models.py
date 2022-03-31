@@ -18,8 +18,8 @@ class Wallet(models.Model):
 
 class Transaction(models.Model):
     token = models.ForeignKey(Token, blank=True, null=True, on_delete=models.CASCADE, related_name='token')
-    sender = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='sender')
-    receiver = models.ForeignKey(Wallet, blank=True, null=True, on_delete=models.CASCADE, related_name='receiver')
+    sender = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='sender_wallet')
+    receiver = models.ForeignKey(Wallet, blank=True, null=True, on_delete=models.CASCADE, related_name='receiver_wallet')
 
     address = models.CharField(max_length=58, null=True, blank=True)
     amount = models.DecimalField(decimal_places=8, max_digits=32, null=True)

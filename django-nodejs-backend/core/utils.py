@@ -29,6 +29,23 @@ def vite_api_call(query: str, params: dict) -> dict:
         return {'error': 1, 'msg': response.text, 'data': None}
 
 
+def receive_transactions(wallet: Wallet):
+    """
+    Make receive call to Vite blockchain API in order to update balance
+    :param wallet: Wallet model instance
+    :return: None, background thread
+    """
+    params = {'mnemonics': wallet.mnemonics}
+    balance = vite_api_call(query='balance', params=params)
+
+    if not balance['error']:
+        # Update receiver balance in database
+        wallet.balance = balance['data']
+        wallet.save()
+
+    print(f"update thread finished.")
+
+
 def get_or_create_telegram_user(request) -> tuple:
     """
     :param request: dict with request data (user details, session)

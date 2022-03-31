@@ -13,6 +13,3 @@ class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = ('sender', 'receiver', 'address', 'amount', 'token', 'status', 'data')
-
-
-
