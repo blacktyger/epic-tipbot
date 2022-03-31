@@ -1,9 +1,8 @@
-import threading
-
-from django.db.models import Q
 from django.http import JsonResponse
 from rest_framework import viewsets
+from django.db.models import Q
 
+import threading
 import json
 
 from vtm.serializers import TelegramUserSerializer

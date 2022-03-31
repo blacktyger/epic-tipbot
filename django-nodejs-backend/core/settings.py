@@ -99,8 +99,8 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql_psycopg2',
-            'NAME': 'epic_data_center',
-            'USER': 'blacktyger',
+            'NAME': 'tipbot-db',
+            'USER': 'tipbot',
             'PASSWORD': 'majkut11',
             'HOST': 'localhost',
             'PORT': '',
