@@ -45,8 +45,9 @@ class MarketData:
                 print(er)
                 return 0
 
-class Mining:
-    CALCULATOR_PERIODS = [1, 3, 7]
+
+class Tipbot:
+    DEFAULT_TIP = 0.01
 
 
 if platform.system() == 'Windows':

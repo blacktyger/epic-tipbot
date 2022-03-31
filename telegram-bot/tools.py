@@ -34,13 +34,38 @@ def parse_user_and_message(message: types.Message) -> tuple:
     return user, msg
 
 
+def parse_tip_command(message: types.Message, amount: Union[float, decimal.Decimal, int]) -> dict:
+    """Return data for quick transaction"""
+
+    # Check if command have enough params
+    if len(message.entities) < 2:
+        response = {'error': 1, 'msg': 'Receiver not recognized', 'data': None}
+
+    elif len(message.entities) == 2:
+        sender, _ = parse_user_and_message(message)
+        receiver = {'username': message.parse_entities().replace('@', '').split(' ')[-1]}
+
+        data = {
+            'sender': sender,
+            'receiver': receiver,
+            'amount': amount,
+            'address': None
+            }
+        response = {'error': 0, 'msg': 'Success', 'data': data}
+
+    else:
+        response = {'error': 1, 'msg': 'Wrong command syntax', 'data': None}
+
+    return response
+
+
 def parse_send_command(message: types.Message) -> dict:
     """Return dict with data for transaction, pre-validation"""
     receiver = None
     address = None
 
-    # Check if transaction have enough params
-    if len(message.text.split(' ')) >= 3:
+    # Check if command have enough params
+    if 3 <= len(message.text.split(' ')) < 5:
 
         # Validate amount
         amount = get_cmd_value(message, index=1)
@@ -87,6 +112,8 @@ def parse_send_command(message: types.Message) -> dict:
             }
 
         return {'error': 0, 'msg': 'Success', 'data': data}
+    else:
+        return {'error': 1, 'msg': 'Wrong command syntax', 'data': None}
 
 
 def is_valid_address(address: str) -> bool:

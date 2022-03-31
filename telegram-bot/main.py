@@ -6,7 +6,7 @@ import requests
 import json
 import time
 
-from settings import Database
+from settings import Database, Tipbot
 from logger_ import logger
 from keys import TOKEN
 import tools
@@ -21,11 +21,13 @@ dp = Dispatcher(bot, storage=storage)
 
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
-COMMANDS = {'start': ['start', ],
-            'balance': ['balance', ],
-            'address': ['address', ],
-            'send': ['send', 'tip', ],
+COMMANDS = {'start': ['start', 'register', 'create'],
+            'balance': ['balance', 'bal', ],
+            'address': ['address', 'deposit', ],
+            'send': ['send', 'withdraw', ],
             'cancel': ['cancel'],
+            'help': ['help', ],
+            'tip': ['tip', ],
             }
 
 async def send_message(**kwargs):
@@ -71,7 +73,7 @@ async def address(message: types.Message):
     response = json.loads(response.content)
 
     if not response['error']:
-        msg = f"🏷  *Deposit Address:*\n" \
+        msg = f"🏷  *Vite Deposit Address:*\n" \
               f"`{response['data']}`\n"
     else:
         msg = f"🔴 {response['msg']}"
@@ -135,20 +137,69 @@ async def send(message: types.Message):
 
     if not data['error']:
         response = requests.post(url=full_url, data=json.dumps(data['data']))
-        response = json.loads(response.content)
 
-        if not response['error']:
-            explorer_url = tools.vitescan_tx_url(response['data']['data']['hash'])
-            receiver = data['data']['receiver']['mention'] if data['data']['receiver'] else data['data']['address']
-            private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *{receiver}*\n" \
-                          f"▫️ [Transaction details]({explorer_url})"
-            # public_msg = f"✅ *@{data['data']['sender']['username']}* send {data['data']['amount']} EPIC to *{data['data']['receiver']['mention']}*"
+        if response.status_code == 200:
+            response = json.loads(response.content)
 
-            await send_message(text=private_msg, chat_id=private_chat)
-            # await send_message(text=public_msg, chat_id=active_chat)
+            if not response['error']:
+                command = f"`({message.get_command(pure=True)} operation)`"
+                explorer_url = tools.vitescan_tx_url(response['data']['data']['hash'])
+                receiver = data['data']['receiver']['mention'] if data['data']['receiver'] else data['data']['address']
+                private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *{receiver}* " \
+                              f"{command if 'withdraw' in command else ''}\n" \
+                              f"▫️ [Transaction details (vitescan.io)]({explorer_url})"
+                # public_msg = f"✅ *@{data['data']['sender']['username']}* send {data['data']['amount']} EPIC to *{data['data']['receiver']['mention']}*"
+
+                await send_message(text=private_msg, chat_id=private_chat)
+                # await send_message(text=public_msg, chat_id=active_chat)
+            else:
+                msg = f"🔴 {response['msg']}"
+                await send_message(text=msg, chat_id=private_chat)
         else:
-            msg = f"🔴 {response['msg']}"
+            print(response.text)
+            msg = f"🔴 Transaction send error"
             await send_message(text=msg, chat_id=private_chat)
+
+
+# /------ TIP EPIC HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['tip'])
+async def tip(message: types.Message):
+    query = 'send_transaction'
+    full_url = f'{TIPBOT_API_URL}/{query}/'
+    active_chat = message.chat.id
+    private_chat = message.from_user.id
+
+    data = tools.parse_tip_command(message, amount=Tipbot.DEFAULT_TIP)
+
+    # Prepare and validate sending params
+    if not data['error']:
+        response = requests.post(url=full_url, data=json.dumps(data['data']))
+
+        if response.status_code == 200:
+            response = json.loads(response.content)
+
+            if not response['error']:
+                explorer_url = tools.vitescan_tx_url(response['data']['data']['hash'])
+                receiver = data['data']['receiver']['username']
+                private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *@{receiver}*\n" \
+                              f"▫️ [Tip details]({explorer_url})"
+                public_msg = f"❤️ *@{data['data']['sender']['username']} {tools.float_to_str(data['data']['amount'])} TIP @{data['data']['receiver']['username']}*"
+
+                await message.delete()
+                await send_message(text=private_msg, chat_id=private_chat)
+                await send_message(text=public_msg, chat_id=active_chat)
+            else:
+                msg = f"🔴 {response['msg']}"
+                await send_message(text=msg, chat_id=private_chat)
+        else:
+            print(response.status_code)
+            msg = f"🔴 Tip send error"
+            await send_message(text=msg, chat_id=private_chat)
+
+    else:
+        print(data['msg'])
+        msg = f"🔴 {data['msg']}"
+        await send_message(text=msg, chat_id=private_chat)
 
 
 # /------ START MAIN LOOP ------\ #

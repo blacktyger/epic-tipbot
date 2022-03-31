@@ -4,8 +4,8 @@ from rest_framework import viewsets
 import json
 
 from .serializers import WalletSerializer, TransactionSerializer
+from vtm.models import Token, TelegramUser
 from .models import Wallet, Transaction
-from vtm.models import Token
 from core import utils
 
 
@@ -52,57 +52,87 @@ def send_transaction(request):
     address = None
     receiver_wallet = None
 
-    # Get Sender wallet from DB
+    # // === VALIDATE PARAMS FOR TRANSACTION === \\
+    # Handle Sender wallet from DB
+    sender = TelegramUser.objects.filter(id=data['sender']['id']).first()
+
+    # If no UserTelegram prompt that sender need to create account
+    if not sender:
+        response = {'error': 1, 'msg': f"@{sender.username} account not found", 'data': None}
+        return JsonResponse(response)
+
     sender_wallet = Wallet.objects.filter(user__id=data['sender']['id']).first()
 
-    # Try to get Receiver wallet from DB
+    # If no Sender Wallet prompt warning
+    if not sender_wallet:
+        response = {'error': 1, 'msg': f"@{sender_wallet.user.username} wallet not found", 'data': None}
+        return JsonResponse(response)
+
+    # Handle Receiver wallet from DB (if given)
     if data['receiver'] and not data['address']:
-        receiver_wallet = Wallet.objects.filter(user__username=data['receiver']['username']).first()
+        receiver = TelegramUser.objects.filter(username=data['receiver']['username']).first()
+
+        # If no UserTelegram prompt that receiver need to create account
+        if not receiver:
+            response = {'error': 1, 'msg': f"@{data['receiver']['username']} account not found", 'data': None}
+            return JsonResponse(response)
+
+        # If no Receiver Wallet prompt warning
+        receiver_wallet = Wallet.objects.filter(user=receiver).first()
+
+        if not receiver_wallet:
+            response = {'error': 1, 'msg': f"@{receiver.username} wallet not found", 'data': None}
+            return JsonResponse(response)
+
         address = receiver_wallet.address
 
     # If no receiver try to parse recipient address
     if data['address'] and not data['receiver']:
         address = data['address']
 
-    if address and data['amount']:
-        # Prepare args to create new Transaction instance
-        tx_params = {
-            'sender': sender_wallet,
-            'receiver': receiver_wallet,
-            'address': address,
-            'token': epic,
-            'amount': data['amount']
-            }
-
-        tx = Transaction.objects.create(**tx_params)
-        print(tx)
-
-        # Prepare and send GET request to back-end Vite API
-        tx_params = {
-            'mnemonics': tx.sender.mnemonics,
-            'toAddress': tx.prepare_address(),
-            'tokenId': tx.token.id,
-            'amount': tx.prepare_amount()
-            }
-
-        transaction = utils.vite_api_call(query='send_transaction', params=tx_params)
-
-        # Update tx status and network transaction data:
-        # if success save tx hash, else error msg.
-        if not transaction['error']:
-            tx.data = {'hash': transaction['data']['hash']}
-            tx.status = 'success'
-            tx.save()
-            tx = TransactionSerializer(tx)
-            response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': tx.data}
-        else:
-            tx.status = 'failed'
-            tx.data = {'error': transaction['msg']}
-            tx.save()
-            response = {'error': 1, 'msg': transaction['msg'], 'data': None}
-
-        print('send_transaction: ', response['msg'])
+    # If something wrong with amount
+    if not data['amount']:
+        response = {'error': 1, 'msg': f"Wrong amount", 'data': None}
         return JsonResponse(response)
+    # ========================================
+
+    # // === SAVE AND SEND TRANSACTION === \\
+    tx_params = {
+        'sender': sender_wallet,
+        'receiver': receiver_wallet,
+        'address': address,
+        'token': epic,
+        'amount': data['amount']
+        }
+
+    tx = Transaction.objects.create(**tx_params)
+    print(tx)
+
+    # Prepare and send POST request to back-end Vite API
+    tx_params = {
+        'mnemonics': tx.sender.mnemonics,
+        'toAddress': tx.prepare_address(),
+        'tokenId': tx.token.id,
+        'amount': tx.prepare_amount()
+        }
+    transaction = utils.vite_api_call(query='send_transaction', params=tx_params)
+
+    # Update tx status and network transaction data:
+    # if success save tx hash, else error msg.
+    if not transaction['error']:
+        tx.data = {'hash': transaction['data']['hash']}
+        tx.status = 'success'
+        tx.save()
+        tx = TransactionSerializer(tx)
+        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': tx.data}
+    else:
+        tx.status = 'failed'
+        tx.data = {'error': transaction['msg']}
+        tx.save()
+        response = {'error': 1, 'msg': transaction['msg'], 'data': None}
+
+    print('send_transaction: ', response['msg'])
+    return JsonResponse(response)
 
 
 def get_address(request):
