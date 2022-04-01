@@ -21,7 +21,7 @@ dp = Dispatcher(bot, storage=storage)
 
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
-COMMANDS = {'start': ['start', 'help', ],
+COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot'],
             'create': ['create', 'register'],
             'balance': ['balance', 'bal', ],
             'address': ['address', 'deposit', ],
@@ -155,7 +155,7 @@ async def send(message: types.Message):
             if not response['error']:
                 command = f"`({message.get_command(pure=True)} operation)`"
                 explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
-                receiver = data['data']['receiver']['mention'] if data['data']['receiver'] else data['data']['address']
+                receiver = f"@{data['data']['receiver']}" if data['data']['receiver']['username'] else data['data']['address']
                 private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *{receiver}* " \
                               f"{command if 'withdraw' in command else ''}\n" \
                               f"▫️ [Transaction details (vitescan.io)]({explorer_url})"
@@ -171,12 +171,12 @@ async def send(message: types.Message):
                 msg = f"🟡 {response['msg']}"
                 await send_message(text=msg, chat_id=private_chat)
         else:
-            print(response.text)
+            # print(response.text)
             msg = f"🔴 Transaction send error"
             await send_message(text=msg, chat_id=private_chat)
 
 
-# /------ DONATION HANDLE ------\ #
+# /------ DONATION EPIC HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['donation'])
 async def donation(message: types.Message):
     query = 'send_transaction'
@@ -185,6 +185,9 @@ async def donation(message: types.Message):
     data = tools.parse_donation_command(message)
 
     if not data['error']:
+        # Add Vite wallet for donations
+        data['data']['address'] = Tipbot.DONATION_ADDRESS
+
         response = requests.post(url=full_url, data=json.dumps(data['data']))
 
         if response.status_code == 200:
@@ -192,22 +195,15 @@ async def donation(message: types.Message):
 
             if not response['error']:
                 explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
-                receiver = data['data']['receiver']['username']
                 private_msg = f"✅ Donation of {tools.float_to_str(data['data']['amount'])} EPIC\n" \
                               f"▫️ [Donation details]({explorer_url})"
-                receiver_msg = f"💸 {data['data']['amount']} EPIC from *@{data['data']['sender']['username']}*"
-
-                # Send tx confirmation to sender's private chat
-                if not response['data']['receiver']['is_bot']:
-                    await send_message(text=private_msg, chat_id=private_chat)
-
-                # Send notification to receiver's private chat
-                if 'receiver' in response['data'].keys():
-                    if not response['data']['receiver']['is_bot']:
-                        await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
+                await send_message(text=private_msg, chat_id=private_chat)
 
             else:
-                msg = f"🔴 {response['msg']}"
+                if 'sendBlock.Height must be larger than 1' in response['msg']:
+                    msg = f"🔴 Your wallet is empty."
+                else:
+                    msg = f"🔴 {response['msg']}"
                 await send_message(text=msg, chat_id=private_chat)
         else:
             print(response.status_code)
@@ -228,7 +224,7 @@ async def tip(message: types.Message):
     active_chat = message.chat.id
     private_chat = message.from_user.id
 
-    data = tools.parse_tip_command(message, amount=Tipbot.DEFAULT_TIP)
+    data = tools.parse_tip_command(message)
 
     # Prepare and validate sending params
     if not data['error']:
@@ -243,7 +239,7 @@ async def tip(message: types.Message):
                 private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *@{receiver}*\n" \
                               f"▫️ [Tip details]({explorer_url})"
                 public_msg = f"❤️ *@{data['data']['sender']['username']} {tools.float_to_str(data['data']['amount'])} TIP @{data['data']['receiver']['username']}*"
-                receiver_msg = f"💸 {data['data']['amount']} EPIC from *@{data['data']['sender']['username']}*"
+                receiver_msg = f"💸 {tools.float_to_str(data['data']['amount'])} EPIC from *@{data['data']['sender']['username']}*"
 
                 # Send tx confirmation to sender's private chat
                 if not response['data']['receiver']['is_bot']:
@@ -258,7 +254,10 @@ async def tip(message: types.Message):
                 await message.delete()
                 await send_message(text=public_msg, chat_id=active_chat)
             else:
-                msg = f"🔴 {response['msg']}"
+                if 'sendBlock.Height must be larger than 1' in response['msg']:
+                    msg = f"🔴 Your wallet is empty."
+                else:
+                    msg = f"🔴 {response['msg']}"
                 await send_message(text=msg, chat_id=private_chat)
         else:
             print(response.status_code)

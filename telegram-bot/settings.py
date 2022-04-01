@@ -47,35 +47,29 @@ class MarketData:
 
 
 class Tipbot:
+    DONATION_ADDRESS = 'vite_0ab437d8a54d52abc802c0e75210885e761d328eaefed14204'
     DEFAULT_TIP = 0.1
     HELP_STRING = """
-    🤖 *Hey, I'm Epic-Cash Tip-Bot* 👋
+🤖 *Hey, I'm Epic-Cash Tip-Bot* 👋
 
-    /create to make account and wallet
+/create to make account and wallet
 
-    ▪️ You will receive one-time link with your 
-    wallet *seedphrase* and *Tip-Bot* account *password* - please save them somewhere safe! 
+▪️ You will receive one-time link with your wallet *seedphrase* and *Tip-Bot* account *password* - please save them somewhere safe! 
 
-    ▪️ Now you can deposit founds to your wallet from *Vite Mobile/Desktop or Web app*, more details at vite.org.
+▪️ Now you can deposit Epic-Cash to your wallet from *Vite Mobile/Desktop or Web app*, more details at vite.org.
 
-    /address to see your deposit address
+/address to see your deposit address
+/balance to see your EPIC token balance
 
-    /balance to see your EPIC token balance
+/tip `@username` & `amount` - Tip other TipBot accounts
+To use `@username` receiver must have *Tip-Bot* account
 
-    /send _amount_  _@username_  
-    `/send 2.5 @blacktyg3r`
-    or
-    /send _amount_  _address_
-    `/send 1 vite_15d3230e3c31c009c968beea7160ae98b491475236ae2cddbc`
+/send `vite_address` & `amount`
+You can also send to any valid *vite_address*
 
-    ▪️ To use _@username_ receiver must have *Tip-Bot* account
-    ▪️ Instead you can use any valid *vite_address*
+*/donate* `amount` *- developer donation ❤*
 
-    /tip _@username_ - quick 0.1 EPIC tip
-
-    */donate _amount_ - developer donation ❤*
-
-    💬 Support: *@blacktyg3r* | [EPIC-RADAR](https://t.me/epicticker)
+💬 Support: *@blacktyg3r* | [EPIC-RADAR](https://t.me/epicticker)
     ️"""
 
 

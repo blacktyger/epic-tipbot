@@ -2,13 +2,9 @@ from aiogram import types
 from typing import Union
 import decimal
 
-
-def kill_markdown(string):
-    return string.replace('*', '')
-
-
 ctx = decimal.Context()
 ctx.prec = 20
+
 
 def float_to_str(f):
     """
@@ -17,6 +13,51 @@ def float_to_str(f):
     """
     d1 = ctx.create_decimal(repr(f))
     return format(d1, 'f')
+
+
+def get_amount(message: types.Message) -> Union[float, None]:
+    """
+    Parse amount from user's messages
+    :param message: types.Message (AIOGRAM)
+    :return: float or None
+    """
+    for match in message.text.split(' '):
+        try:
+            amount = float(match)
+            return amount
+        except Exception as e:
+            continue
+
+    return None
+
+
+def get_receiver(message: types.Message) -> Union[str, None]:
+    """
+    Parse receiver username from user's messages
+    :param message: types.Message (AIOGRAM)
+    :return: receiver string or None
+    """
+    for match in message.entities:
+        if match['type'] == 'mention':
+            start = match['offset']
+            stop = start + match['length']
+            return message.text[start:stop].replace('@', '')
+
+    return None
+
+
+def get_address(message: types.Message) -> Union[str, None]:
+    """
+    Parse receiver vite address from user's messages
+    :param message: types.Message (AIOGRAM)
+    :return: receiver string or None
+    """
+    for match in message.text.split(' '):
+        if is_valid_address(match):
+            return match
+
+    return None
+
 
 def parse_user_and_message(message: types.Message) -> tuple:
     user = message.from_user.__dict__['_values']
@@ -35,20 +76,36 @@ def parse_user_and_message(message: types.Message) -> tuple:
 
 
 def parse_donation_command(message: types.Message) -> dict:
-    """Return data for quick developer donation"""
+    """Return data for developer donation transaction"""
 
     sender, _ = parse_user_and_message(message)
-    receiver = {'username': 'blacktyg3r'}
+    amount = get_amount(message)
 
-    # Validate amount
-    amount = get_cmd_value(message, index=1)
-    try:
-        amount = float(amount)
-        if amount <= 0:
-            return {'error': 1, 'msg': 'Wrong amount value', 'data': None}
-    except Exception as e:
-        print(e)
-        return {'error': 1, 'msg': 'Wrong amount value', 'data': None}
+    if not amount:
+        return {'error': 1, 'msg': 'Wrong amount value.', 'data': None}
+
+    data = {
+        'sender': sender,
+        'receiver': None,
+        'amount': amount,
+        'address': None  # will be added after
+        }
+    response = {'error': 0, 'msg': 'Success', 'data': data}
+
+    return response
+
+
+def parse_tip_command(message: types.Message) -> dict:
+    """Return data for TIP transaction"""
+    sender, _ = parse_user_and_message(message)
+    receiver = {'username': get_receiver(message)}
+    amount = get_amount(message)
+
+    if not receiver['username']:
+        return {'error': 1, 'msg': 'Invalid recipient username.', 'data': None}
+
+    if not amount:
+        return {'error': 1, 'msg': 'Wrong amount value.', 'data': None}
 
     data = {
         'sender': sender,
@@ -56,113 +113,39 @@ def parse_donation_command(message: types.Message) -> dict:
         'amount': amount,
         'address': None
         }
-    response = {'error': 0, 'msg': 'Success', 'data': data}
 
-    return response
-
-
-def parse_tip_command(message: types.Message, amount: Union[float, decimal.Decimal, int]) -> dict:
-    """Return data for quick transaction (tip)"""
-
-    # Check if command have enough params
-    if len(message.entities) < 2:
-        response = {'error': 1, 'msg': 'Invalid recipient username.', 'data': None}
-
-    elif len(message.entities) == 2:
-        sender, _ = parse_user_and_message(message)
-        receiver = {'username': message.parse_entities().replace('@', '').split(' ')[-1]}
-
-        data = {
-            'sender': sender,
-            'receiver': receiver,
-            'amount': amount,
-            'address': None
-            }
-        response = {'error': 0, 'msg': 'Success', 'data': data}
-
-    else:
-        response = {'error': 1, 'msg': 'Wrong command syntax', 'data': None}
-
-    return response
+    return {'error': 0, 'msg': 'Success', 'data': data}
 
 
 def parse_send_command(message: types.Message) -> dict:
-    """Return dict with data for transaction, pre-validation"""
-    receiver = None
-    address = None
+    """Return data for send transaction"""
+    amount = get_amount(message)
+    address = get_address(message)
+    receiver = {'username': get_receiver(message)}
+    sender, _ = parse_user_and_message(message)
 
-    # Check if command have enough params
-    if 3 <= len(message.text.split(' ')) < 5:
+    print(amount, sender['username'], '-->', receiver['username'], address)
 
-        # Validate amount
-        amount = get_cmd_value(message, index=1)
-        try:
-            amount = float(amount)
-            if amount <= 0:
-                return {'error': 1, 'msg': 'Wrong amount value', 'data': None}
-        except Exception as e:
-            print(e)
-            return {'error': 1, 'msg': 'Wrong amount value', 'data': None}
+    if not amount:
+        return {'error': 1, 'msg': 'Wrong amount value.', 'data': None}
 
-        # Get sender
-        sender, _ = parse_user_and_message(message)
+    if not receiver['username'] and not address:
+        return {'error': 1, 'msg': 'Please provide `@username` or `vite Address`', 'data': None}
 
-        # Check if receiver is TelegramUser
-        if len(message.entities) == 2:
-            receiver = message.entities[-1].user
+    data = {
+        'sender': sender,
+        'receiver': receiver,
+        'address': address,
+        'amount': amount
+        }
 
-            if receiver:
-                if receiver.username:
-                    username = receiver.username
-                    mention = receiver.mention
-                else:
-                    username = receiver.first_name
-                    mention = receiver.get_mention(username)
-            else:
-                username = message.parse_entities().split('@')[-1]
-                mention = f"@{username}"
-
-            receiver = {'username': username, 'mention': mention}
-
-        # Check if receiver is vite address
-        else:
-            # Validate address
-            address = get_cmd_value(message, index=2)
-            if not is_valid_address(address):
-                return {'error': 1, 'msg': 'Invalid receiver address', 'data': None}
-
-        data = {
-            'sender': sender,
-            'receiver': receiver,
-            'address': address,
-            'amount': amount
-            }
-
-        return {'error': 0, 'msg': 'Success', 'data': data}
-    else:
-        return {'error': 1, 'msg': 'Wrong command syntax', 'data': None}
+    return {'error': 0, 'msg': 'Success', 'data': data}
 
 
 def is_valid_address(address: str) -> bool:
     return len(address) == 55 and address.startswith('vite_')
 
 
-def is_valid_cmd(message: types.Message) -> bool:
-    msg_parts = message.text.split(' ')
-    return len(msg_parts) > 1
-
-
 def vitescan_tx_url(tx_hash):
     return f"https://vitescan.io/tx/{tx_hash}"
 
-
-def get_cmd_value(message: types.Message, index: Union[str, int] = 'last') -> Union[str, list]:
-    msg_parts = message.text.split(' ')
-    if index == 'last':
-        return msg_parts[-1].strip()
-    elif index == 'first':
-        return msg_parts[1].strip()
-    elif isinstance(index, int):
-        return msg_parts[index].strip()
-    else:
-        return [msg.strip() for msg in msg_parts[1:]]

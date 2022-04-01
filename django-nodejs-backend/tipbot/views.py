@@ -59,7 +59,6 @@ class TransactionView(viewsets.ModelViewSet):
 def send_transaction(request):
     """End-point for POST request with TelegramUser and Transaction data to send"""
     data = json.loads(request.body)
-    address = None
     receiver_wallet = None
 
     # // === VALIDATE PARAMS FOR TRANSACTION === \\
@@ -79,12 +78,14 @@ def send_transaction(request):
         return JsonResponse(response)
 
     # Handle Receiver wallet from DB (if given)
-    if data['receiver'] and not data['address']:
-        receiver = TelegramUser.objects.filter(username=data['receiver']['username']).first()
+    receiver_as_user = data['receiver']['username']
+
+    if receiver_as_user:
+        receiver = TelegramUser.objects.filter(username=receiver_as_user).first()
 
         # If no UserTelegram prompt that receiver need to create account
         if not receiver:
-            response = {'error': 1, 'msg': f"@{data['receiver']['username']} have no Tipbot account.", 'data': None}
+            response = {'error': 1, 'msg': f"@{receiver_as_user} have no Tipbot account.", 'data': None}
             return JsonResponse(response)
 
         # If no Receiver Wallet prompt warning
@@ -97,8 +98,12 @@ def send_transaction(request):
         address = receiver_wallet.address
 
     # If no receiver try to parse recipient address
-    if data['address'] and not data['receiver']:
+    elif data['address']:
         address = data['address']
+
+    else:
+        response = {'error': 1, 'msg': f"Please provide receiver username or address", 'data': None}
+        return JsonResponse(response)
 
     # If something wrong with amount
     if not data['amount']:
@@ -137,7 +142,7 @@ def send_transaction(request):
         tx = TransactionSerializer(tx)
         payload = {'transaction': tx.data}
 
-        if data['receiver']:
+        if receiver_as_user:
             # Start thread to update receiver balance in background
             receiver_update = threading.Thread(target=utils.receive_transactions, args=[receiver_wallet])
             print(f"Starting update wallet {receiver_wallet} thread...")
