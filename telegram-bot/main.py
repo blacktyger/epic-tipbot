@@ -1,7 +1,9 @@
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.types import ParseMode
 from aiogram import *
 
+from random import randint
 import requests
 import json
 import time
@@ -30,7 +32,34 @@ COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot']
             'cancel': ['cancel'],
             'donation': ['donation', ],
             'tip': ['tip', ],
+            # GUI / Keyboards / includes
+            'wallet': ['wallet', ]
             }
+
+
+@dp.message_handler(commands=COMMANDS['wallet'])
+async def wallet(message: types.Message):
+    private_chat = message.from_user.id
+
+    await message.reply_media_group(media=media, reply=False)
+    await send_message(text="Epic-Cash TipBot Wallet", chat_id=private_chat,
+                       reply_markup=keyboard_inline)
+
+
+button1 = InlineKeyboardButton(text="👋 Deposit", callback_data="randomvalue_of10")
+button2 = InlineKeyboardButton(text="💋 Withdraw", callback_data="randomvalue_of100")
+keyboard_inline = InlineKeyboardMarkup().add(button1, button2)
+
+
+@dp.callback_query_handler(text=["randomvalue_of10", "randomvalue_of100"])
+async def random_value(call: types.CallbackQuery):
+    private_chat = call.message.from_user.id
+
+    if call.data == "randomvalue_of10":
+        await call.message.answer(randint(1, 10))
+    if call.data == "randomvalue_of100":
+        await call.message.answer(randint(1, 100))
+    await call.answer()
 
 
 async def send_message(**kwargs):
@@ -45,7 +74,10 @@ async def send_message(**kwargs):
 @dp.message_handler(commands=COMMANDS['start'])
 async def start(message: types.Message):
     private_chat = message.from_user.id
-    await send_message(text=Tipbot.HELP_STRING, chat_id=private_chat)
+    media = types.MediaGroup()
+    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
+                       caption=Tipbot.HELP_STRING, parse_mode=ParseMode.MARKDOWN)
+    await bot.send_media_group(chat_id=private_chat, media=media)
 
 
 # /------ CREATE ACCOUNT HANDLE ------\ #
