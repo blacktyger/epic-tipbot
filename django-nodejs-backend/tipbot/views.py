@@ -147,7 +147,7 @@ def send_transaction(request):
             receiver_update = threading.Thread(target=utils.receive_transactions, args=[receiver_wallet])
             print(f"Starting update wallet {receiver_wallet} thread...")
             receiver_update.start()
-            receiver_update.join()
+            # receiver_update.join()
 
             # Serialize TelegramUser instances
             receiver = TelegramUserSerializer(receiver)
