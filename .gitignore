@@ -13,9 +13,12 @@
 /telegram-bot/keys.py
 /telegram-bot/main.log
 /telegram-bot/__pycache__/
+/telegram-bot/tipbot_storage.pickle
 /django-nodejs-backend/vtm/__pycache__/
 /django-nodejs-backend/tipbot/__pycache__/
 /django-nodejs-backend/core/__pycache__/
 
+*.log
+*.pickle
 .idea/
 .gitignore
