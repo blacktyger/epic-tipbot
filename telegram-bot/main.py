@@ -1,14 +1,17 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher.filters.state import StatesGroup, State
+from aiogram.utils.callback_data import CallbackData
+from aiogram.dispatcher import FSMContext
 from aiogram.types import ParseMode
+from decimal import Decimal
 from aiogram import *
 
-from random import randint
 import requests
 import json
 import time
 
-from settings import Database, Tipbot
+from settings import Database, Tipbot, MarketData
+import long_strings as strings
 from logger_ import logger
 from keys import TOKEN
 import tools
@@ -17,57 +20,474 @@ import tools
 __version__ = '1.0'
 
 # /------ AIOGRAM BOT SETTINGS ------\ #
-storage = MemoryStorage()
 bot = Bot(token=TOKEN)
-dp = Dispatcher(bot, storage=storage)
+dp = Dispatcher(bot, storage=tools.temp_storage())
 
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
-COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot'],
-            'create': ['create', 'register'],
-            'balance': ['balance', 'bal', ],
-            'address': ['address', 'deposit', ],
-            'history': ['history', 'transactions', ],
-            'send': ['send', 'withdraw', ],
-            'cancel': ['cancel'],
-            'donation': ['donation', ],
-            'tip': ['tip', ],
-            # GUI / Keyboards / includes
-            'wallet': ['wallet', ]
-            }
+PRICE = MarketData()
+COMMANDS = tools.COMMANDS
+
+# Wallet GUI buttons callback
+wallet_cb = CallbackData('wallet', 'action', 'user')
+donate_cb = CallbackData('donate', 'action', 'amount')
 
 
-@dp.message_handler(commands=COMMANDS['wallet'])
-async def wallet(message: types.Message):
+# Manage Wallet GUI states
+class WithdrawStates(StatesGroup):
+    ask_for_address = State()
+    ask_for_amount = State()
+    confirmation = State()
+
+class SendStates(StatesGroup):
+    ask_for_recipient = State()
+    ask_for_amount = State()
+    confirmation = State()
+
+class DonateStates(StatesGroup):
+    ask_for_amount = State()
+    amount_from_button = State()
+    confirmation = State()
+
+
+# /------ CREATE ACCOUNT HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['create'])
+async def create(message: types.Message):
+    query = 'users/create'
+    full_url = f'{DJANGO_API_URL}/{query}/'
+    private_chat = message.from_user.id
+    user, message_ = tools.parse_user_and_message(message)
+
+    response = requests.post(url=full_url, data=json.dumps(user))
+    response = json.loads(response.content)
+
+    if not response['error']:
+        msg = f"✅ Account created successfully!\n\n" \
+              f"▪️️ [WALLET SEEDPHRASE AND PASSWORD]({response['data']})\n\n" \
+              f"▪️️ Please backup message from link ️\n" \
+              f"▪️️ Open your wallet 👉 /wallet" \
+
+    else:
+        msg = f"🟡 {response['msg']}"
+
+    await send_message(text=msg, chat_id=private_chat)
+
+
+# /------ WALLET GUI HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['wallet'], state='*')
+async def wallet(message: types.Message, state: FSMContext):
+    query = 'offline_balance'
+    full_url = f'{TIPBOT_API_URL}/{query}/'
+    private_chat = message.from_user.id
+    user, _ = tools.parse_user_and_message(message)
+
+    # Reset old state and data
+    await state.finish()
+    await state.reset_data()
+
+    # Prepare main wallet inline keyboard
+    keyboard = tools.build_wallet_keyboard(user, wallet_cb)
+
+    # Display loading wallet GUI
+    wallet_gui = await send_message(
+        text=strings.loading_wallet_1(), chat_id=private_chat, reply_markup=keyboard)
+
+    # Get Epic-Cash price in USD from Coingecko API
+    epic_vs_usd = PRICE.price_epic_vs('USD')
+
+    # Save user dict to temp storage
+    await state.update_data(active_user=user)
+
+    # Send POST request to get wallet balance from network
+    try:
+        response = requests.post(url=full_url, data=json.dumps(user))
+    except requests.exceptions.ConnectionError:
+        # Update loading wallet GUI to error wallet
+        await wallet_gui.edit_text(text=strings.connection_error_wallet(),
+                                   reply_markup=keyboard,
+                                   parse_mode=ParseMode.MARKDOWN)
+        return
+
+    # Serialize POST request response
+    response = json.loads(response.content)
+
+    # Handle response error
+    if response['error']:
+        if 'Connection problems' in response['msg']:
+            text = strings.connection_error_wallet()
+        else:
+            text = strings.invalid_wallet()
+
+        # Update loading wallet GUI to error wallet
+        await wallet_gui.edit_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    # Handle case when wallet needs to update new transactions
+    status = response['msg']
+    while 'Updating' in status:
+        await wallet_gui.edit_text(text=strings.loading_wallet_2(),
+                                   reply_markup=keyboard,
+                                   parse_mode=ParseMode.MARKDOWN)
+        response = requests.post(url=full_url, data=json.dumps(user))
+        response = json.loads(response.content)
+        status = response['msg']
+        time.sleep(0.3)
+        await wallet_gui.edit_text(text=strings.loading_wallet_1(),
+                                   reply_markup=keyboard,
+                                   parse_mode=ParseMode.MARKDOWN)
+        time.sleep(0.3)
+
+    # Prepare updated GUI string
+    if 'EPIC' in response['data'].keys():
+        epic_balance = response['data']['EPIC']
+    else:
+        epic_balance = 0.0
+
+    balance_in_usd = f"{round(Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+    wallet_gui_string = strings.ready_wallet(epic_balance, balance_in_usd)
+
+    # Save epic_balance to temp storage
+    await state.update_data(epic_balance=epic_balance)
+
+    # Update loading wallet GUI to ready wallet
+    await wallet_gui.edit_text(text=wallet_gui_string,
+                               reply_markup=keyboard,
+                               parse_mode=ParseMode.MARKDOWN)
+
+
+# /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
+@dp.callback_query_handler(wallet_cb.filter(action='deposit'), state='*')
+async def gui_deposit(query: types.CallbackQuery, callback_data: dict):
+    await address(query.message, custom_user=callback_data['user'])
+    await query.answer()
+
+
+# /------ WALLET GUI WITHDRAW STEP 1/3 ------\ #
+@dp.callback_query_handler(wallet_cb.filter(action='withdraw'), state='*')
+async def gui_withdraw(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    # Set new state
+    await WithdrawStates.ask_for_address.set()
+
+    # Ask user for address
+    ask_for_address = await query.message.reply(text='📩 Please send me address to withdraw:',
+                                                reply=False, reply_markup=tools.cancel_keyboard())
+    # Save message to remove to temp storage
+    await state.update_data(msg_ask_for_address=ask_for_address)
+    await query.answer()
+
+
+# /------ WALLET GUI WITHDRAW STEP 2/3 ------\ #
+@dp.message_handler(state=WithdrawStates.ask_for_address)
+async def handle_withdraw_address(message: types.Message, state: FSMContext):
+    private_chat = message.from_user.id
+    withdraw_address = message.text.strip()
+
+    # Validate withdraw address and save to storage
+    if tools.is_valid_address(withdraw_address):
+        await state.update_data(address=withdraw_address)
+
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+
+        # Set new state
+        await WithdrawStates.ask_for_amount.set()
+
+        # Send message about amount
+        ask_for_amount = await send_message(text='💵 How much to withdraw?',
+                                            chat_id=private_chat,
+                                            reply_markup=tools.cancel_keyboard())
+    else:
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+
+        # Send invalid amount message
+        ask_for_amount = await send_message(text='🔸 Invalid withdraw address, try again:',
+                                            chat_id=private_chat,
+                                            reply_markup=tools.cancel_keyboard())
+
+    # Save message to remove to temp storage
+    await state.update_data(msg_ask_for_amount=ask_for_amount)
+
+
+# /------ WALLET GUI WITHDRAW STEP 3/3 ------\ #
+@dp.message_handler(state=WithdrawStates.ask_for_amount)
+async def handle_withdraw_amount(message: types.Message, state: FSMContext):
+    private_chat = message.from_user.id
+    amount = message.text.strip()
+
+    try:
+        # Validate and save amount
+        amount = float(amount)
+        await state.update_data(amount=amount)
+
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+
+        # Set new state
+        await WithdrawStates.confirmation.set()
+        data = await state.get_data()
+
+        confirmation_string = f" ☑️ Confirm your withdraw request:\n\n" \
+                              f"`▪️ Withdraw {data['amount']} EPIC to:`\n" \
+                              f"`{data['address']}`\n"
+
+        confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+
+        confirmation_keyboard.row(
+            InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_withdraw'),
+            InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+            )
+
+        # Send confirmation keyboard
+        confirmation = await send_message(text=confirmation_string,
+                                          chat_id=private_chat,
+                                          reply_markup=confirmation_keyboard)
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_confirmation=confirmation)
+
+    except Exception as e:
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+        print(e)
+
+        # Send wrong amount message
+        confirmation = await send_message(text='🔸 Wrong amount, try again', chat_id=private_chat)
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_confirmation=confirmation)
+
+
+# /------ WALLET GUI SEND STEP 1/3 ------\ #
+@dp.callback_query_handler(wallet_cb.filter(action='send'), state='*')
+async def gui_send(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    # Set new state
+    await SendStates.ask_for_recipient.set()
+
+    # Ask user for recipient
+    ask_for_recipient = await query.message.reply(text='📩 Provide receiver @username',
+                                                  reply=False, reply_markup=tools.cancel_keyboard())
+    # Save message to remove to temp storage
+    await state.update_data(msg_ask_for_recipient=ask_for_recipient)
+    await query.answer()
+
+
+# /------ WALLET GUI SEND STEP 2/3 ------\ #
+@dp.message_handler(state=SendStates.ask_for_recipient)
+async def handle_send_recipient(message: types.Message, state: FSMContext):
     private_chat = message.from_user.id
 
-    await message.reply_media_group(media=media, reply=False)
-    await send_message(text="Epic-Cash TipBot Wallet", chat_id=private_chat,
-                       reply_markup=keyboard_inline)
+    # Validate recipient and save to storage
+    if message.entities:
+        recipient = message.parse_entities().replace('@', '')
+        await state.update_data(recipient={'username': recipient})
+
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+
+        # Set new state
+        await SendStates.ask_for_amount.set()
+
+        # Send message about amount
+        ask_for_amount = await send_message(text='💵 How much to send?',
+                                            chat_id=private_chat,
+                                            reply_markup=tools.cancel_keyboard())
+    else:
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+
+        # Send invalid amount message
+        ask_for_amount = await send_message(text='🔸 Invalid recipient username, try again:',
+                                            chat_id=private_chat,
+                                            reply_markup=tools.cancel_keyboard())
+
+    # Save message to remove to temp storage
+    await state.update_data(msg_ask_for_amount=ask_for_amount)
 
 
-button1 = InlineKeyboardButton(text="👋 Deposit", callback_data="randomvalue_of10")
-button2 = InlineKeyboardButton(text="💋 Withdraw", callback_data="randomvalue_of100")
-keyboard_inline = InlineKeyboardMarkup().add(button1, button2)
+# /------ WALLET GUI SEND STEP 3/3 ------\ #
+@dp.message_handler(state=SendStates.ask_for_amount)
+async def handle_send_amount(message: types.Message, state: FSMContext):
+    private_chat = message.from_user.id
+    amount = message.text.strip()
+
+    try:
+        # Validate and save amount
+        amount = float(amount)
+        await state.update_data(amount=amount)
+
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+
+        # Set new state
+        await SendStates.confirmation.set()
+        data = await state.get_data()
+
+        confirmation_string = f" ☑️ Confirm your send request:\n\n" \
+                              f"`▪️ Send {data['amount']} EPIC to` " \
+                              f"`@{data['recipient']['username']}`\n"
+
+        confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+
+        confirmation_keyboard.row(
+            InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_send'),
+            InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+            )
+
+        # Send confirmation keyboard
+        confirmation = await send_message(text=confirmation_string,
+                                          chat_id=private_chat,
+                                          reply_markup=confirmation_keyboard)
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_confirmation=confirmation)
+
+    except Exception as e:
+        # Remove messages from previous state
+        await tools.remove_state_messages(state)
+        print(e)
+
+        # Send wrong amount message
+        confirmation = await send_message(text='🔸 Wrong amount, try again', chat_id=private_chat)
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_confirmation=confirmation)
 
 
-@dp.callback_query_handler(text=["randomvalue_of10", "randomvalue_of100"])
-async def random_value(call: types.CallbackQuery):
-    private_chat = call.message.from_user.id
+# /------ WALLET GUI DONATE STEP 1/2 ------\ #
+@dp.callback_query_handler(wallet_cb.filter(action='donate'), state='*')
+async def gui_donate(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    private_chat = callback_data['user']
 
-    if call.data == "randomvalue_of10":
-        await call.message.answer(randint(1, 10))
-    if call.data == "randomvalue_of100":
-        await call.message.answer(randint(1, 100))
-    await call.answer()
+    # Set new state
+    await DonateStates.ask_for_amount.set()
+
+    # Send message about amount
+    ask_for_amount = await send_message(text='💵 How much donate to developer?',
+                                        chat_id=private_chat,
+                                        reply_markup=tools.donate_keyboard())
+    # Save message to remove to temp storage
+    await state.update_data(msg_ask_for_amount=ask_for_amount)
+    await query.answer()
 
 
-async def send_message(**kwargs):
-    """Helper function for sending messages from bot to TelegramUser"""
-    await bot.send_message(
-        **kwargs, parse_mode=ParseMode.MARKDOWN,
-        disable_web_page_preview=True
+# /------ WALLET GUI DONATE STEP 2/2 ------\ #
+@dp.callback_query_handler(text=['donate_1', 'donate_5', 'donate_10'],
+                           state=DonateStates.ask_for_amount)
+async def handle_donate_amount(query: types.CallbackQuery, state: FSMContext):
+    # Parse and save amount
+    amount = float(query.data.split('_')[1])
+    await state.update_data(amount=amount)
+
+    # Remove messages from previous state
+    await tools.remove_state_messages(state)
+
+    # Set new state and provide donation address
+    await SendStates.confirmation.set()
+    await state.update_data(address=Tipbot.DONATION_ADDRESS)
+
+    data = await state.get_data()
+    private_chat = data['active_user']['id']
+
+    # Prepare confirmation string and keyboard
+    confirmation_string = f" ☑️ Confirm your donation:\n\n" \
+                          f"`▪️ Send {data['amount']} EPIC to developer`"
+
+    confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+    confirmation_keyboard.row(
+        InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_send'),
+        InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
         )
+
+    # Send confirmation keyboard
+    confirmation = await send_message(text=confirmation_string,
+                                      chat_id=private_chat,
+                                      reply_markup=confirmation_keyboard)
+
+    # Save message to remove to temp storage
+    await state.update_data(msg_confirmation=confirmation)
+
+
+# /------ WALLET GUI SUPPORT STEP 1/1 ------\ #
+@dp.callback_query_handler(wallet_cb.filter(action='support'), state='*')
+async def gui_support(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    private_chat = callback_data['user']
+    await send_message(text='🔘 Need help? Talk to *@blacktyg3r*', chat_id=private_chat)
+    await query.answer()
+
+
+# /------ WALLET GUI SEND EPIC CALLBACK ------\ #
+@dp.callback_query_handler(text=['confirm_withdraw', 'confirm_send'],
+                           state=[WithdrawStates.confirmation, SendStates.confirmation])
+async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
+    api_query = 'send_transaction'
+    full_url = f'{TIPBOT_API_URL}/{api_query}/'
+    data = await state.get_data()
+    private_chat = data['active_user']['id'] if 'active_user' in data.keys() else None
+
+    # TODO: Better handle for no active_user case
+    if not private_chat:
+        return
+
+    # Build and send withdraw transaction
+    request_data = {
+        'sender': data['active_user'],
+        'receiver': data['recipient'] if 'recipient' in data.keys() else {'username': None},
+        'address': data['address'] if 'address' in data.keys() else None,
+        'amount': data['amount']
+        }
+
+    response = requests.post(url=full_url, data=json.dumps(request_data))
+
+    if response.status_code != 200:
+        msg = f"🔴 Transaction send error"
+        await send_message(text=msg, chat_id=private_chat)
+        return
+
+    response = json.loads(response.content)
+
+    if response['error']:
+        if 'no account' in response['msg']:
+            msg = f"🟡 @{data['recipient']['username']} have no Tip-Bot account yet."
+        elif 'sendBlock.Height must be larger than 1' in response['msg']:
+            msg = f"🟡 Insufficient balance."
+        else:
+            msg = f"🟡 {response['msg']}"
+
+        await send_message(text=msg, chat_id=private_chat)
+        await tools.remove_state_messages(state)
+        await query.answer()
+        return
+
+    # Show user notification/alert
+    await query.answer(text='Transaction Confirmed!')
+    time.sleep(1)
+
+    # Remove messages from previous state
+    await tools.remove_state_messages(state)
+
+    amount = tools.float_to_str(data['amount'])
+    sender = f"*@{request_data['sender']['username']}*"
+
+    # Create Vitescan.io explorer link to transaction
+    transaction_hash = response['data']['transaction']['data']['hash']
+    explorer_url = tools.vitescan_tx_url(transaction_hash)
+
+    # Prepare user confirmation message
+    private_msg = f"✅ Transaction sent successfully\n" \
+                  f"▪️ [Transaction details (vitescan.io)]({explorer_url})"
+    receiver_msg = f"💸   `{amount} EPIC from`   {sender}"
+
+    # Send tx confirmation to sender's private chat
+    await send_message(text=private_msg, chat_id=private_chat)
+
+    # Send notification to receiver's private chat
+    if 'receiver' in response['data'].keys():
+        await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
+
+    # Finish withdraw state
+    await state.finish()
+    await query.answer()
 
 
 # /------ START/HELP HANDLE ------\ #
@@ -80,42 +500,25 @@ async def start(message: types.Message):
     await bot.send_media_group(chat_id=private_chat, media=media)
 
 
-# /------ CREATE ACCOUNT HANDLE ------\ #
-@dp.message_handler(commands=COMMANDS['create'])
-async def create(message: types.Message):
-    query = 'users/create'
-    full_url = f'{DJANGO_API_URL}/{query}/'
-    active_chat = message.chat.id
-    private_chat = message.from_user.id
-    user, message_ = tools.parse_user_and_message(message)
-
-    response = requests.post(url=full_url, data=json.dumps(user))
-    response = json.loads(response.content)
-
-    if not response['error']:
-        msg = f"✅ {response['msg']}\n\n"
-        msg += f"⚠️ Please backup message from link ⚠️\n\n" \
-               f"➡️ [ONE TIME SECRET LINK]({response['data']})\n"
-    else:
-        msg = f"🟡 {response['msg']}"
-
-    await send_message(text=msg, chat_id=private_chat)
-
-
 # /------ DISPLAY DEPOSIT ADDRESS HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['address'])
-async def address(message: types.Message):
+async def address(message: types.Message, custom_user=None):
     query = 'address'
     full_url = f'{TIPBOT_API_URL}/{query}/'
     active_chat = message.chat.id
-    private_chat = message.from_user.id
-    user, message_ = tools.parse_user_and_message(message)
+
+    # We can pass custom user_id to fetch address
+    # from user different from sender itself
+    if not custom_user:
+        user, message_ = tools.parse_user_and_message(message)
+    else:
+        user = {'id': custom_user}
 
     response = requests.post(url=full_url, data=json.dumps(user))
     response = json.loads(response.content)
 
     if not response['error']:
-        msg = f"🏷  *Tipbot Wallet Deposit Address:*\n" \
+        msg = f"🏷  *Your Deposit Address:*\n\n" \
               f"`{response['data']}`\n"
     else:
         msg = f"🔴 {response['msg']}"
@@ -128,7 +531,6 @@ async def address(message: types.Message):
 async def balance(message: types.Message):
     query = 'balance'
     full_url = f'{TIPBOT_API_URL}/{query}/'
-    active_chat = message.chat.id
     private_chat = message.from_user.id
     user, message_ = tools.parse_user_and_message(message)
 
@@ -155,6 +557,7 @@ async def balance(message: types.Message):
             await reply.delete()
 
         balances = []
+
         for symbol, value in response['data'].items():
             balances.append(f"`{value} {symbol}`")
 
@@ -167,45 +570,57 @@ async def balance(message: types.Message):
 
 
 # /------ SEND EPIC HANDLE ------\ #
-@dp.message_handler(commands=COMMANDS['send'])
+@dp.message_handler(commands=COMMANDS['send'], state='*')
 async def send(message: types.Message):
     query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{query}/'
-    active_chat = message.chat.id
     private_chat = message.from_user.id
 
     # Prepare and validate sending params
     data = tools.parse_send_command(message)
 
-    if not data['error']:
-        response = requests.post(url=full_url, data=json.dumps(data['data']))
+    if data['error']:
+        return
 
-        if response.status_code == 200:
-            response = json.loads(response.content)
+    data = data['data']
+    response = requests.post(url=full_url, data=json.dumps(data))
 
-            # Parse API response
-            if not response['error']:
-                command = f"`({message.get_command(pure=True)} operation)`"
-                explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
-                receiver = f"@{data['data']['receiver']}" if data['data']['receiver']['username'] else data['data']['address']
-                private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *{receiver}* " \
-                              f"{command if 'withdraw' in command else ''}\n" \
-                              f"▫️ [Transaction details (vitescan.io)]({explorer_url})"
-                receiver_msg = f"{data['data']['amount']} EPIC from *@{data['data']['sender']['username']}*"
+    if response.status_code != 200:
+        msg = f"🔴 Transaction send error"
+        await send_message(text=msg, chat_id=private_chat)
+        return
 
-                # Send tx confirmation to sender's private chat
-                await send_message(text=private_msg, chat_id=private_chat)
+    response = json.loads(response.content)
 
-                # Send notification to receiver's private chat
-                if 'receiver' in response['data'].keys():
-                    await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
-            else:
-                msg = f"🟡 {response['msg']}"
-                await send_message(text=msg, chat_id=private_chat)
-        else:
-            # print(response.text)
-            msg = f"🔴 Transaction send error"
-            await send_message(text=msg, chat_id=private_chat)
+    if response['error']:
+        msg = f"🟡 {response['msg']}"
+        await send_message(text=msg, chat_id=private_chat)
+        return
+
+    amount = tools.float_to_str(data['amount'])
+    sender = f"*@{data['sender']['username']}*"
+
+    # Create Vitescan.io explorer link to transaction
+    transaction_hash = response['data']['transaction']['data']['hash']
+    explorer_url = tools.vitescan_tx_url(transaction_hash)
+
+    # Prepare receiver or address
+    if data['receiver']['username']:
+        receiver_mention = f"*@{data['receiver']}*"
+    else:
+        receiver_mention = f"`{data['address']}`"
+
+    # Prepare user confirmation message
+    private_msg = f"✅ {amount} EPIC to {receiver_mention} " \
+                  f"▫️ [Transaction details (vitescan.io)]({explorer_url})"
+    receiver_msg = f"{amount} EPIC from {sender}"
+
+    # Send tx confirmation to sender's private chat
+    await send_message(text=private_msg, chat_id=private_chat)
+
+    # Send notification to receiver's private chat
+    if 'receiver' in response['data'].keys():
+        await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
 
 
 # /------ DONATION EPIC HANDLE ------\ #
@@ -300,6 +715,36 @@ async def tip(message: types.Message):
         print(data['msg'])
         msg = f"🔴 {data['msg']}"
         await send_message(text=msg, chat_id=private_chat)
+
+
+async def send_message(**kwargs):
+    """Helper function for sending messages from bot to TelegramUser"""
+    message = await bot.send_message(
+        **kwargs, parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True
+        )
+    return message
+
+
+@dp.callback_query_handler(text='cancel_any', state='*')
+async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
+    # Remove messages
+    await tools.remove_state_messages(state)
+
+    # Clean temp storage except active_user
+    data = await state.get_data()
+
+    if 'active_user' in data.keys():
+        user = data['active_user']
+        await state.reset_data()
+        await state.update_data(active_user=user)
+    else:
+        await state.reset_data()
+
+    # Reset state
+    print(f"Reset state")
+    await state.finish()
+    await query.answer()
 
 
 # TODO: History Handle

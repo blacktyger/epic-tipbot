@@ -24,7 +24,7 @@ def vite_api_call(query: str, params: dict) -> dict:
         if 'error' in response.keys():
             return {'error': 1, 'msg': response['error']['message'], 'data': None}
         else:
-            return {'error': 0, 'msg': f'Success {query} call', 'data': response}
+            return {'error': 0, 'msg': f'success _{query}_ call', 'data': response}
     else:
         return {'error': 1, 'msg': response.text, 'data': None}
 
@@ -99,7 +99,7 @@ def create_wallet(user: TelegramUser) -> dict:
             address=new_wallet['data']['address'],
             mnemonics=new_wallet['data']['mnemonics']
             )
-        response = {'error': 0, 'msg': 'Wallet created successfully!', 'data': wallet}
+        response = {'error': 0, 'msg': 'wallet created successfully', 'data': wallet}
 
     return response
 
@@ -112,7 +112,7 @@ def parse_vite_balance(data: dict):
             balance = int(token_details['balance']) / 10 ** token.decimals
             balances[token.symbol] = balance
 
-    return {'error': 0, 'msg': 'Balances fetched successfully!', 'data': balances}
+    return {'error': 0, 'msg': 'balance success', 'data': balances}
 
 
 def create_wallet_secret(wallet: Wallet, request) -> str:

@@ -36,14 +36,14 @@ class CreateTelegramUserView(CreateView):
         serialized = TelegramUserSerializer(user)
 
         if exists:
-            response = {'error': 1, 'msg': 'Account already active.', 'data': serialized.data}
+            response = {'error': 1, 'msg': 'account already active', 'data': serialized.data}
         else:
             wallet = utils.create_wallet(user)
             if wallet['error']:
                 response = {'error': 1, 'msg': wallet['msg'], 'data': None}
             else:
                 secret_url = utils.create_wallet_secret(wallet['data'], request)
-                response = {'error': 0, 'msg': 'Account created successfully!', 'data': secret_url}
+                response = {'error': 0, 'msg': 'account create success!', 'data': secret_url}
 
         return JsonResponse(response)
 

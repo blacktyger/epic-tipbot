@@ -1,6 +1,14 @@
+import os
+
 from aiogram import types
 from typing import Union
 import decimal
+
+from aiogram.contrib.fsm_storage.files import PickleStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.callback_data import CallbackData
+from aiogram.utils.exceptions import MessageToDeleteNotFound
 
 ctx = decimal.Context()
 ctx.prec = 20
@@ -149,3 +157,86 @@ def is_valid_address(address: str) -> bool:
 def vitescan_tx_url(tx_hash):
     return f"https://vitescan.io/tx/{tx_hash}"
 
+
+def build_wallet_keyboard(user: dict, callback: CallbackData) -> InlineKeyboardMarkup:
+    """
+    Prepare Wallet GUI InlineKeyboard
+    :param callback: CallbackData instance (aiogram)
+    :param user: TelegramUser dict
+    :return: InlineKeyboardMarkup instance (aiogram)
+    """
+
+    buttons = ['deposit', 'withdraw', 'send', 'donate', 'support']
+    icons = ['↘ ', '↗️ ', '➡️ ', '❤️ ', '💬️ ']
+
+    buttons = [InlineKeyboardButton(
+        text=f"{icons[i]}{btn.capitalize()}",
+        callback_data=callback.new(action=btn, user=user['id']))
+        for i, btn in enumerate(buttons)]
+
+    keyboard_inline = InlineKeyboardMarkup() \
+        .row(buttons[0], buttons[1]) \
+        .row(buttons[2], buttons[3]) \
+        .add(buttons[4])
+
+    return keyboard_inline
+
+
+async def remove_state_messages(state: FSMContext):
+    """Remove bot messages saved in temp storage"""
+    if await state.get_state():
+        data = await state.get_data()
+        state_ = await state.get_state()
+        print('active data: ', data)
+
+        # Remove messages
+        if f'msg_{state_.split(":")[-1]}' in data.keys():
+            print('DELETE: ', data[f'msg_{state_.split(":")[-1]}']['text'])
+            try:
+                await data[f'msg_{state_.split(":")[-1]}'].delete()
+            except MessageToDeleteNotFound:
+                pass
+
+
+def cancel_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    button = InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+    keyboard.add(button)
+    return keyboard
+
+
+def donate_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    donate_1 = InlineKeyboardButton(text='1 EPIC', callback_data='donate_1')
+    donate_5 = InlineKeyboardButton(text='5 EPIC', callback_data='donate_5')
+    donate_x = InlineKeyboardButton(text='10 EPIC', callback_data='donate_10')
+    button = InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+    keyboard.row(donate_1, donate_5, donate_x).add(button)
+    return keyboard
+
+
+def temp_storage():
+    """Initialize temporary bot storage (pickle)"""
+    pickle_storage = "tipbot_storage.pickle"
+
+    try:
+        storage = PickleStorage(pickle_storage)
+    except EOFError:
+        os.remove(pickle_storage)
+        storage = PickleStorage(pickle_storage)
+
+    return storage
+
+
+COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot'],
+            'create': ['create', 'register'],
+            'balance': ['balance', 'bal', ],
+            'address': ['address', 'deposit', ],
+            'history': ['history', 'transactions', ],
+            'send': ['send', 'withdraw', ],
+            'cancel': ['cancel'],
+            'donation': ['donation', ],
+            'tip': ['tip', ],
+            # GUI / Keyboards / includes
+            'wallet': ['wallet', ]
+            }

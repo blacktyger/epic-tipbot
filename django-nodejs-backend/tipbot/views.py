@@ -67,14 +67,14 @@ def send_transaction(request):
 
     # If no UserTelegram prompt that sender need to create account
     if not sender:
-        response = {'error': 1, 'msg': f"@{sender.username} have no Tipbot account.", 'data': None}
+        response = {'error': 1, 'msg': f"sender have no account", 'data': None}
         return JsonResponse(response)
 
     sender_wallet = Wallet.objects.filter(user__id=data['sender']['id']).first()
 
     # If no Sender Wallet prompt warning
     if not sender_wallet:
-        response = {'error': 1, 'msg': f"@{sender_wallet.user.username} wallet not found", 'data': None}
+        response = {'error': 1, 'msg': f"sender wallet not found", 'data': None}
         return JsonResponse(response)
 
     # Handle Receiver wallet from DB (if given)
@@ -85,14 +85,14 @@ def send_transaction(request):
 
         # If no UserTelegram prompt that receiver need to create account
         if not receiver:
-            response = {'error': 1, 'msg': f"@{receiver_as_user} have no Tipbot account.", 'data': None}
+            response = {'error': 1, 'msg': f"receiver have no account.", 'data': None}
             return JsonResponse(response)
 
         # If no Receiver Wallet prompt warning
         receiver_wallet = Wallet.objects.filter(user=receiver).first()
 
         if not receiver_wallet:
-            response = {'error': 1, 'msg': f"@{receiver.username} wallet not found", 'data': None}
+            response = {'error': 1, 'msg': f"receiver wallet not found", 'data': None}
             return JsonResponse(response)
 
         address = receiver_wallet.address
@@ -102,12 +102,12 @@ def send_transaction(request):
         address = data['address']
 
     else:
-        response = {'error': 1, 'msg': f"Please provide receiver username or address", 'data': None}
+        response = {'error': 1, 'msg': f"invalid receiver or address", 'data': None}
         return JsonResponse(response)
 
     # If something wrong with amount
     if not data['amount']:
-        response = {'error': 1, 'msg': f"Wrong amount", 'data': None}
+        response = {'error': 1, 'msg': f"invalid amount", 'data': None}
         return JsonResponse(response)
     # ========================================
 
@@ -153,7 +153,7 @@ def send_transaction(request):
             receiver = TelegramUserSerializer(receiver)
             payload['receiver'] = receiver.data
 
-        response = {'error': 0, 'msg': 'Transaction sent successfully!', 'data': payload}
+        response = {'error': 0, 'msg': 'send success', 'data': payload}
     else:
         # Update transaction status in database and prepare failed response
         tx.status = 'failed'
@@ -173,20 +173,23 @@ def get_address(request):
     wallet = Wallet.objects.filter(user__id=user['id']).first()
 
     if wallet:
-        response = {'error': 0, 'msg': 'Success get_address call', 'data': wallet.address}
+        response = {'error': 0, 'msg': 'success _get_address_ call', 'data': wallet.address}
 
     return JsonResponse(response)
 
 
 def get_balance(request):
-    """End-point for POST request with TelegramUser data to retrieve wallet balance"""
-    response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
+    """
+    End-point for POST request with TelegramUser
+    data to retrieve wallet balance from network
+    """
+    response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
 
     user = json.loads(request.body)
     wallet = Wallet.objects.filter(user__id=user['id']).first()
-    params = {'mnemonics': wallet.mnemonics}
 
     if wallet:
+        params = {'mnemonics': wallet.mnemonics}
         balance = utils.vite_api_call(query='balance', params=params)
         if not balance['error']:
             wallet.balance = balance['data']
@@ -198,9 +201,25 @@ def get_balance(request):
                 response = utils.parse_vite_balance(balance['data'])
         else:
             print(balance['msg'])
-            response = {'error': 1, 'msg': 'Connection errors, please try later.', 'data': None}
+            response = {'error': 1, 'msg': balance['msg'], 'data': None}
 
     print('get_balance: ', response['msg'])
+    return JsonResponse(response)
+
+
+def get_offline_balance(request):
+    """
+    End-point for POST request with TelegramUser
+    data to retrieve wallet balance from DB (cached)
+    """
+    response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
+    user = json.loads(request.body)
+    wallet = Wallet.objects.filter(user__id=user['id']).first()
+
+    if wallet:
+        wallet = WalletSerializer(wallet)
+        response = {'error': 0, 'msg': 'Success', 'data': wallet.data}
+
     return JsonResponse(response)
 
 
