@@ -29,7 +29,7 @@ PRICE = MarketData()
 COMMANDS = tools.COMMANDS
 
 # Wallet GUI buttons callback
-wallet_cb = CallbackData('wallet', 'action', 'user')
+wallet_cb = CallbackData('wallet', 'action', 'user', 'username')
 donate_cb = CallbackData('donate', 'action', 'amount')
 
 
@@ -158,7 +158,8 @@ async def wallet(message: types.Message, state: FSMContext):
 # /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
 @dp.callback_query_handler(wallet_cb.filter(action='deposit'), state='*')
 async def gui_deposit(query: types.CallbackQuery, callback_data: dict):
-    await address(query.message, custom_user=callback_data['user'])
+    user = {'id': callback_data['user'], 'username': callback_data['username']}
+    await address(query.message, custom_user=user)
     await query.answer()
 
 
@@ -512,14 +513,16 @@ async def address(message: types.Message, custom_user=None):
     if not custom_user:
         user, message_ = tools.parse_user_and_message(message)
     else:
-        user = {'id': custom_user}
+        user = custom_user
 
     response = requests.post(url=full_url, data=json.dumps(user))
     response = json.loads(response.content)
 
     if not response['error']:
-        msg = f"🏷  *Your Deposit Address:*\n\n" \
-              f"`{response['data']}`\n"
+        msg = f"🏷  *Your Deposit Address:*\n" \
+              f"`{response['data']}`\n\n" \
+              f"👤  *Your username:*\n" \
+              f"`@{user['username']}`"
     else:
         msg = f"🔴 {response['msg']}"
 

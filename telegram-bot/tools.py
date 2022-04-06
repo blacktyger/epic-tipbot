@@ -171,7 +171,7 @@ def build_wallet_keyboard(user: dict, callback: CallbackData) -> InlineKeyboardM
 
     buttons = [InlineKeyboardButton(
         text=f"{icons[i]}{btn.capitalize()}",
-        callback_data=callback.new(action=btn, user=user['id']))
+        callback_data=callback.new(action=btn, user=user['id'], username=user['username']))
         for i, btn in enumerate(buttons)]
 
     keyboard_inline = InlineKeyboardMarkup() \

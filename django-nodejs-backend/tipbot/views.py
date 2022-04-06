@@ -70,6 +70,11 @@ def send_transaction(request):
         response = {'error': 1, 'msg': f"sender have no account", 'data': None}
         return JsonResponse(response)
 
+    # Prevent accidental multiple transactions
+    if sender.locked:
+        response = {'error': 1, 'msg': f"too many requests", 'data': None}
+        return JsonResponse(response)
+
     sender_wallet = Wallet.objects.filter(user__id=data['sender']['id']).first()
 
     # If no Sender Wallet prompt warning
@@ -139,6 +144,8 @@ def send_transaction(request):
         tx.status = 'success'
         tx.save()
 
+        sender.temp_lock()
+
         tx = TransactionSerializer(tx)
         payload = {'transaction': tx.data}
 
@@ -147,7 +154,7 @@ def send_transaction(request):
             receiver_update = threading.Thread(target=utils.receive_transactions, args=[receiver_wallet])
             print(f"Starting update wallet {receiver_wallet} thread...")
             receiver_update.start()
-            # receiver_update.join()
+            receiver_update.join()
 
             # Serialize TelegramUser instances
             receiver = TelegramUserSerializer(receiver)
@@ -170,6 +177,7 @@ def get_address(request):
     response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
 
     user = json.loads(request.body)
+    print(user)
     wallet = Wallet.objects.filter(user__id=user['id']).first()
 
     if wallet:

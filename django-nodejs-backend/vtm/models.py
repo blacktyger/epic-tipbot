@@ -1,3 +1,6 @@
+import threading
+import time
+
 from unixtimestampfield.fields import UnixTimeStampField
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -11,6 +14,7 @@ from .managers import CustomUserManager
 class TelegramUser(AbstractUser):
     id = models.IntegerField(unique=True, primary_key=True)
     is_bot = models.BooleanField(default=False)
+    locked = models.BooleanField(default=False)
     username = models.CharField(max_length=128, blank=True, null=True)
     last_name = models.CharField(max_length=128, blank=True, null=True)
     first_name = models.CharField(max_length=128, blank=True, null=True)
@@ -23,6 +27,19 @@ class TelegramUser(AbstractUser):
 
     class Meta:
         unique_together = ('id', 'username')
+
+    def temp_lock(self, time_: int = 10):
+        self.locked = True
+        self.save()
+
+        thread = threading.Thread(target=self.unlock, args=[time_])
+        thread.start()
+
+    def unlock(self, time_: int):
+        if self.locked:
+            time.sleep(time_)
+            self.locked = False
+            self.save()
 
     def __str__(self):
         return f"[{self.id}] {self.username}"
