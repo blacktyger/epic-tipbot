@@ -1,3 +1,5 @@
+"""Long Telegram strings"""
+
 def loading_wallet_1():
     return \
 f"""

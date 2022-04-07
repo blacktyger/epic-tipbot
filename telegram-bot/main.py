@@ -1,4 +1,7 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import hashlib
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InlineQuery, InlineQueryResultArticle, \
+    InputTextMessageContent
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
@@ -50,6 +53,65 @@ class DonateStates(StatesGroup):
     confirmation = State()
 
 
+# //-- BALANCE INLINE -- \\ #
+@dp.inline_handler(lambda inline_query: 'wallet' in inline_query.query)
+async def inline_welcome(inline_query: InlineQuery):
+    query = 'balance'
+    full_url = f'{TIPBOT_API_URL}/{query}/'
+    user = inline_query['from'].__dict__['_values']
+    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
+    thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
+    title = "EPIC Tip-Bot Wallet"
+    bot_name = await bot.get_me()
+
+    response = requests.post(url=full_url, data=json.dumps(user))
+
+    if response.status_code == 200:
+        response = json.loads(response.content)
+
+        if response['error']:
+            lines = ['Please setup your account and wallet', f"Talk to @{bot_name.username}"]
+        else:
+            if 'EPIC' in response['data'].keys():
+                epic_balance = response['data']['EPIC']
+            else:
+                epic_balance = 0.0
+
+            lines = [f"Balance: {epic_balance} EPIC"]
+
+        item = InlineQueryResultArticle(
+            id=result_id,
+            title=title,
+            description='\n'.join(lines),
+            thumb_url=thumb_url,
+            input_message_content=InputTextMessageContent(f'Manage your wallet: @{bot_name.username}', parse_mode=ParseMode.HTML)
+            )
+        await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
+
+
+# // -- TIP INLINE -- \\ #
+@dp.inline_handler(lambda inline_query: 'tip' in inline_query.query)
+async def inline_welcome(inline_query: InlineQuery):
+    """
+    User can type in any chat window `tip @username amount` and click
+    InlineQueryResult to send as ready /tip command
+    """
+    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
+    thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
+    title = "Send Epic-Cash TIP"
+    lines = [f"type @username and amount",
+             "and click here"]
+
+    item = InlineQueryResultArticle(
+        id=result_id,
+        title=title,
+        description='\n'.join(lines),
+        thumb_url=thumb_url,
+        input_message_content=InputTextMessageContent(inline_query.query, parse_mode=ParseMode.HTML)
+        )
+    await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
+
+
 # /------ CREATE ACCOUNT HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['create'])
 async def create(message: types.Message):
@@ -68,7 +130,10 @@ async def create(message: types.Message):
               f"▪️️ Open your wallet 👉 /wallet" \
 
     else:
-        msg = f"🟡 {response['msg']}"
+        if 'account already active' in response['msg']:
+            msg = f"🟢 Your account is already active :)"
+        else:
+            msg = f"🟡 {response['msg']}"
 
     await send_message(text=msg, chat_id=private_chat)
 
@@ -76,7 +141,7 @@ async def create(message: types.Message):
 # /------ WALLET GUI HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['wallet'], state='*')
 async def wallet(message: types.Message, state: FSMContext):
-    query = 'offline_balance'
+    query = 'balance'
     full_url = f'{TIPBOT_API_URL}/{query}/'
     private_chat = message.from_user.id
     user, _ = tools.parse_user_and_message(message)
@@ -250,7 +315,7 @@ async def handle_withdraw_amount(message: types.Message, state: FSMContext):
     except Exception as e:
         # Remove messages from previous state
         await tools.remove_state_messages(state)
-        print(e)
+        logger.error(e)
 
         # Send wrong amount message
         confirmation = await send_message(text='🔸 Wrong amount, try again', chat_id=private_chat)
@@ -346,7 +411,7 @@ async def handle_send_amount(message: types.Message, state: FSMContext):
     except Exception as e:
         # Remove messages from previous state
         await tools.remove_state_messages(state)
-        print(e)
+        logger.error(e)
 
         # Send wrong amount message
         confirmation = await send_message(text='🔸 Wrong amount, try again', chat_id=private_chat)
@@ -413,7 +478,10 @@ async def handle_donate_amount(query: types.CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(wallet_cb.filter(action='support'), state='*')
 async def gui_support(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
     private_chat = callback_data['user']
-    await send_message(text='🔘 Need help? Talk to *@blacktyg3r*', chat_id=private_chat)
+    support_link = f"[@blacktyg3r](https://t.me/blacktyg3r)"
+    msg = f'🔘 Need help? Talk to {support_link}'
+
+    await send_message(text=msg, chat_id=private_chat)
     await query.answer()
 
 
@@ -501,6 +569,16 @@ async def start(message: types.Message):
     await bot.send_media_group(chat_id=private_chat, media=media)
 
 
+# /------ FAQ HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['faq'])
+async def start(message: types.Message):
+    private_chat = message.from_user.id
+    media = types.MediaGroup()
+    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
+                       caption=Tipbot.FAQ_STRING, parse_mode=ParseMode.MARKDOWN)
+    await bot.send_media_group(chat_id=private_chat, media=media)
+
+
 # /------ DISPLAY DEPOSIT ADDRESS HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['address'])
 async def address(message: types.Message, custom_user=None):
@@ -539,7 +617,6 @@ async def balance(message: types.Message):
 
     response = requests.post(url=full_url, data=json.dumps(user))
     response = json.loads(response.content)
-    print(response)
 
     if not response['error']:
         status = response['msg']
@@ -656,18 +733,19 @@ async def donation(message: types.Message):
                     msg = f"🔴 {response['msg']}"
                 await send_message(text=msg, chat_id=private_chat)
         else:
-            print(response.status_code)
+            logger.error(response.status_code)
             msg = f"🔴 Donation send error"
             await send_message(text=msg, chat_id=private_chat)
 
     else:
-        print(data['msg'])
+        logger.error(data['msg'])
         msg = f"🔴 {data['msg']}"
         await send_message(text=msg, chat_id=private_chat)
 
 
 # /------ TIP EPIC HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['tip'])
+@dp.message_handler(lambda message: message.text.startswith('tip'))
 async def tip(message: types.Message):
     query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{query}/'
@@ -688,7 +766,7 @@ async def tip(message: types.Message):
                 receiver = data['data']['receiver']['username']
                 private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *@{receiver}*\n" \
                               f"▫️ [Tip details]({explorer_url})"
-                public_msg = f"❤️ *@{data['data']['sender']['username']} {tools.float_to_str(data['data']['amount'])} TIP @{data['data']['receiver']['username']}*"
+                public_msg = f"❤️ *@{data['data']['sender']['username']} {tools.float_to_str(data['data']['amount'])} TIP to @{data['data']['receiver']['username']}*"
                 receiver_msg = f"💸 {tools.float_to_str(data['data']['amount'])} EPIC from *@{data['data']['sender']['username']}*"
 
                 # Send tx confirmation to sender's private chat
@@ -701,7 +779,6 @@ async def tip(message: types.Message):
                         await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
 
                 # Replace original /tip user message with tip confirmation in active channel
-                await message.delete()
                 await send_message(text=public_msg, chat_id=active_chat)
             else:
                 if 'sendBlock.Height must be larger than 1' in response['msg']:
@@ -710,14 +787,15 @@ async def tip(message: types.Message):
                     msg = f"🔴 {response['msg']}"
                 await send_message(text=msg, chat_id=private_chat)
         else:
-            print(response.status_code)
             msg = f"🔴 Tip send error"
             await send_message(text=msg, chat_id=private_chat)
 
     else:
-        print(data['msg'])
+        logger.error(data['msg'])
         msg = f"🔴 {data['msg']}"
         await send_message(text=msg, chat_id=private_chat)
+
+    await message.delete()
 
 
 async def send_message(**kwargs):
@@ -745,7 +823,7 @@ async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
         await state.reset_data()
 
     # Reset state
-    print(f"Reset state")
+    logger.info(f"Reset state")
     await state.finish()
     await query.answer()
 

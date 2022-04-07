@@ -5,8 +5,8 @@ from django.db.models import Q
 import threading
 import json
 
-from vtm.serializers import TelegramUserSerializer
 from .serializers import WalletSerializer, TransactionSerializer
+from vtm.serializers import TelegramUserSerializer
 from vtm.models import Token, TelegramUser
 from .models import Wallet, Transaction
 from core import utils
@@ -57,12 +57,14 @@ class TransactionView(viewsets.ModelViewSet):
 
 
 def send_transaction(request):
-    """End-point for POST request with TelegramUser and Transaction data to send"""
+    """
+    End-point for POST request with TelegramUser and Transaction data to send
+    """
     data = json.loads(request.body)
     receiver_wallet = None
 
     # // === VALIDATE PARAMS FOR TRANSACTION === \\
-    # Handle Sender wallet from DB
+    # Handle Sender wallet from DB, we use Telegram ID's to identify sender
     sender = TelegramUser.objects.filter(id=data['sender']['id']).first()
 
     # If no UserTelegram prompt that sender need to create account
@@ -72,7 +74,7 @@ def send_transaction(request):
 
     # Prevent accidental multiple transactions
     if sender.locked:
-        response = {'error': 1, 'msg': f"too many requests", 'data': None}
+        response = {'error': 1, 'msg': f"transaction already in progress", 'data': None}
         return JsonResponse(response)
 
     sender_wallet = Wallet.objects.filter(user__id=data['sender']['id']).first()
@@ -82,10 +84,12 @@ def send_transaction(request):
         response = {'error': 1, 'msg': f"sender wallet not found", 'data': None}
         return JsonResponse(response)
 
-    # Handle Receiver wallet from DB (if given)
+    # Handle Receiver wallet from DB (if given),
+    # we use Telegram usernames to identify receiver
     receiver_as_user = data['receiver']['username']
 
     if receiver_as_user:
+        receiver_as_user = receiver_as_user.lower()
         receiver = TelegramUser.objects.filter(username=receiver_as_user).first()
 
         # If no UserTelegram prompt that receiver need to create account
@@ -130,7 +134,7 @@ def send_transaction(request):
 
     # Prepare and send POST request to back-end Vite API
     tx_params = {
-        'mnemonics': tx.sender.mnemonics,
+        'mnemonics': tx.sender.decrypt_mnemonics(),
         'toAddress': tx.prepare_address(),
         'tokenId': tx.token.id,
         'amount': tx.prepare_amount()
@@ -173,11 +177,13 @@ def send_transaction(request):
 
 
 def get_address(request):
-    """End-point for POST request with TelegramUser data to retrieve wallet address"""
+    """
+    End-point for POST request with TelegramUser
+    data to retrieve wallet address
+    """
     response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
 
     user = json.loads(request.body)
-    print(user)
     wallet = Wallet.objects.filter(user__id=user['id']).first()
 
     if wallet:
@@ -197,7 +203,7 @@ def get_balance(request):
     wallet = Wallet.objects.filter(user__id=user['id']).first()
 
     if wallet:
-        params = {'mnemonics': wallet.mnemonics}
+        params = {'mnemonics': wallet.decrypt_mnemonics()}
         balance = utils.vite_api_call(query='balance', params=params)
         if not balance['error']:
             wallet.balance = balance['data']
@@ -208,31 +214,8 @@ def get_balance(request):
             else:
                 response = utils.parse_vite_balance(balance['data'])
         else:
-            print(balance['msg'])
             response = {'error': 1, 'msg': balance['msg'], 'data': None}
 
     print('get_balance: ', response['msg'])
     return JsonResponse(response)
 
-
-def get_offline_balance(request):
-    """
-    End-point for POST request with TelegramUser
-    data to retrieve wallet balance from DB (cached)
-    """
-    response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
-    user = json.loads(request.body)
-    wallet = Wallet.objects.filter(user__id=user['id']).first()
-
-    if wallet:
-        wallet = WalletSerializer(wallet)
-        response = {'error': 0, 'msg': 'Success', 'data': wallet.data}
-
-    return JsonResponse(response)
-
-
-# // -- Telegram User TIP-BOT Account Creation -- \\
-# - User sends /create or /start command to BOT
-# - BOT Python handler prepare data and send request
-#   with user details (tg_id, tg_username) to Django BACK-END
-# - Handle new and existing wallets

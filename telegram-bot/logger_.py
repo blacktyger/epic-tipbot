@@ -110,7 +110,7 @@ def setup_logging(console_log_output, console_log_level, console_log_color, logf
 def get_logger():
     script_name = os.path.splitext(os.path.basename(sys.argv[0]))[0]
     return setup_logging(console_log_output="stdout", console_log_level="info", console_log_color=True,
-                         logfile_file=script_name + ".log", logfile_log_level="debug", logfile_log_color=False,
+                         logfile_file=script_name + ".log", logfile_log_level="info", logfile_log_color=False,
                          log_line_template="%(color_on)s[%(asctime)s] [%(threadName)s] [%(levelname)-8s] %(message)s%(color_off)s")
 
 

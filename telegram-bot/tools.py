@@ -1,14 +1,16 @@
-import os
-
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.exceptions import MessageToDeleteNotFound
+from aiogram.contrib.fsm_storage.files import PickleStorage
+from aiogram.utils.callback_data import CallbackData
+from aiogram.dispatcher import FSMContext
 from aiogram import types
 from typing import Union
-import decimal
 
-from aiogram.contrib.fsm_storage.files import PickleStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.callback_data import CallbackData
-from aiogram.utils.exceptions import MessageToDeleteNotFound
+import decimal
+import os
+
+from logger_ import logger
+
 
 ctx = decimal.Context()
 ctx.prec = 20
@@ -68,6 +70,7 @@ def get_address(message: types.Message) -> Union[str, None]:
 
 
 def parse_user_and_message(message: types.Message) -> tuple:
+    """Parse from User and Message instance to dict"""
     user = message.from_user.__dict__['_values']
     if 'username' not in user.keys():
         user['username'] = user['first_name']
@@ -77,7 +80,7 @@ def parse_user_and_message(message: types.Message) -> tuple:
         'date': message.date.timestamp(),
         'text': message.text,
         'chat': message.chat.__dict__['_values'],
-        'entities': message.entities[0].__dict__['_values'],
+        'entities': message.entities,
         }
 
     return user, msg
@@ -132,7 +135,7 @@ def parse_send_command(message: types.Message) -> dict:
     receiver = {'username': get_receiver(message)}
     sender, _ = parse_user_and_message(message)
 
-    print(amount, sender['username'], '-->', receiver['username'], address)
+    logger.info(amount, sender['username'], '-->', receiver['username'], address)
 
     if not amount:
         return {'error': 1, 'msg': 'Wrong amount value.', 'data': None}
@@ -151,6 +154,7 @@ def parse_send_command(message: types.Message) -> dict:
 
 
 def is_valid_address(address: str) -> bool:
+    """Validate Vite address"""
     return len(address) == 55 and address.startswith('vite_')
 
 
@@ -187,11 +191,10 @@ async def remove_state_messages(state: FSMContext):
     if await state.get_state():
         data = await state.get_data()
         state_ = await state.get_state()
-        print('active data: ', data)
 
         # Remove messages
         if f'msg_{state_.split(":")[-1]}' in data.keys():
-            print('DELETE: ', data[f'msg_{state_.split(":")[-1]}']['text'])
+            logger.info('DELETE MSG: ', data[f'msg_{state_.split(":")[-1]}']['text'])
             try:
                 await data[f'msg_{state_.split(":")[-1]}'].delete()
             except MessageToDeleteNotFound:
@@ -199,6 +202,7 @@ async def remove_state_messages(state: FSMContext):
 
 
 def cancel_keyboard():
+    """Initialize InlineKeyboard to cancel operation/state"""
     keyboard = InlineKeyboardMarkup()
     button = InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
     keyboard.add(button)
@@ -206,6 +210,7 @@ def cancel_keyboard():
 
 
 def donate_keyboard():
+    """Initialize InlineKeyboard for donate operation"""
     keyboard = InlineKeyboardMarkup()
     donate_1 = InlineKeyboardButton(text='1 EPIC', callback_data='donate_1')
     donate_5 = InlineKeyboardButton(text='5 EPIC', callback_data='donate_5')
@@ -228,15 +233,16 @@ def temp_storage():
     return storage
 
 
-COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot'],
-            'create': ['create', 'register'],
-            'balance': ['balance', 'bal', ],
-            'address': ['address', 'deposit', ],
+COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot', 'Start', 'Help', ],
+            'create': ['create', 'register', 'Create', ],
+            'balance': ['balance', 'bal', 'Balance', ],
+            'address': ['address', 'deposit', 'Address', ],
             'history': ['history', 'transactions', ],
             'send': ['send', 'withdraw', ],
             'cancel': ['cancel'],
-            'donation': ['donation', ],
-            'tip': ['tip', ],
+            'donation': ['donation', 'Donation', ],
+            'tip': ['tip', 'Tip', 'TIP', ],
+            'faq': ['faq', 'Faq'],
             # GUI / Keyboards / includes
-            'wallet': ['wallet', ]
+            'wallet': ['wallet', 'Wallet', ]
             }

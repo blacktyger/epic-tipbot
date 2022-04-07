@@ -1,7 +1,9 @@
+from cryptography.fernet import Fernet
 import requests
+
 import json
 
-from .secrets import secret_links_login, secret_links_key
+from .secrets import secret_links_login, secret_links_key, encryption_key
 from vtm.models import Token, TelegramUser
 from .secret_links import OneTimeSecret
 from tipbot.models import Wallet
@@ -54,6 +56,9 @@ def get_or_create_telegram_user(request) -> tuple:
     payload = json.loads(request.body)
     exists = TelegramUser.objects.filter(id=payload['id'])
 
+    # Make usernames always lowercase
+    payload['username'] = payload['username'].lower()
+
     if not exists:
         payload['password'] = TelegramUser.objects.make_random_password()
         request.session['acc_pass'] = payload['password']
@@ -90,14 +95,17 @@ def create_wallet(user: TelegramUser) -> dict:
     :return: JSON Response with Wallet instance
     """
     new_wallet = vite_api_call(query="create", params={})
-
     if new_wallet['error']:
         response = {'error': 1, 'msg': new_wallet['msg'], 'data': None}
     else:
+        # Encrypt mnemonics before storing in database
+        mnemonics_b = bytes(new_wallet['data']['mnemonics'], 'utf-8')
+        encrypted_mnemonics = Fernet(encryption_key).encrypt(mnemonics_b)
+
         wallet = Wallet.objects.create(
             user=user,
             address=new_wallet['data']['address'],
-            mnemonics=new_wallet['data']['mnemonics']
+            mnemonics=encrypted_mnemonics.decode('utf-8')
             )
         response = {'error': 0, 'msg': 'wallet created successfully', 'data': wallet}
 
@@ -105,6 +113,7 @@ def create_wallet(user: TelegramUser) -> dict:
 
 
 def parse_vite_balance(data: dict):
+    """Helper to parse Vite wallet balances from network"""
     balances = {}
     if 'balanceInfoMap' in data.keys():
         for token_id, token_details in data['balanceInfoMap'].items():
@@ -123,12 +132,12 @@ def create_wallet_secret(wallet: Wallet, request) -> str:
     """
     message = f"\n// === EPIC-CASH TIPBOT === \\\\\n" \
               f"\n// WALLET MNEMONICS:\n" \
-              f"\n{wallet.mnemonics}\n" \
+              f"\n{wallet.decrypt_mnemonics()}\n" \
               f"\n===========================" \
               f"\n// ACCOUNT PASSWORD:\n" \
               f"\n{request.session['acc_pass']}" \
               f"\n===========================\n" \
-              f"\nPlease make copy of this message, it can be used only once!"
+              f"\nPlease make copy of this message, it can be viewed only once!"
 
     secret = OneTimeSecret(secret_links_login, secret_links_key)
     secret_obj = secret.share(message)

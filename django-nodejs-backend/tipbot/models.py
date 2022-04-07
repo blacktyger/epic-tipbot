@@ -1,6 +1,8 @@
+from cryptography.fernet import Fernet
 from django.conf import settings
 from django.db import models
 
+from core.secrets import encryption_key
 from vtm.models import Token
 
 
@@ -11,6 +13,13 @@ class Wallet(models.Model):
     mnemonics = models.TextField(max_length=512, blank=True, null=True)
 
     objects = models.Manager()
+
+    def decrypt_mnemonics(self):
+        try:
+            mnemonics_b = self.mnemonics.encode('utf-8')
+            return Fernet(encryption_key).decrypt(mnemonics_b).decode('utf-8')
+        except Exception:
+            return self.mnemonics
 
     def __str__(self):
         return f"{self.user.username}"
@@ -47,4 +56,3 @@ class Transaction(models.Model):
             return self.receiver.address
         elif self.address:
             return self.address
-
