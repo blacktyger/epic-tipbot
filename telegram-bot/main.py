@@ -568,7 +568,7 @@ async def start(message: types.Message):
     media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
                        caption=Tipbot.HELP_STRING, parse_mode=ParseMode.MARKDOWN)
 
-    if Tipbot.ADMIN_ID in private_chat:
+    if Tipbot.ADMIN_ID in str(private_chat):
         await bot.send_media_group(chat_id=active_chat, media=media)
     else:
         await bot.send_media_group(chat_id=private_chat, media=media)
@@ -583,7 +583,7 @@ async def start(message: types.Message):
     media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
                        caption=Tipbot.FAQ_STRING, parse_mode=ParseMode.MARKDOWN)
 
-    if Tipbot.ADMIN_ID in private_chat:
+    if Tipbot.ADMIN_ID in str(private_chat):
         await bot.send_media_group(chat_id=active_chat, media=media)
     else:
         await bot.send_media_group(chat_id=private_chat, media=media)
