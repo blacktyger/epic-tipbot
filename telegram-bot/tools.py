@@ -242,7 +242,7 @@ COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot',
             'cancel': ['cancel'],
             'donation': ['donation', 'Donation', ],
             'tip': ['tip', 'Tip', 'TIP', ],
-            'faq': ['faq', 'Faq'],
+            'faq': ['faq', 'faq@EpicTipBot', 'Faq', ],
             # GUI / Keyboards / includes
-            'wallet': ['wallet', 'Wallet', ]
+            'wallet': ['wallet', 'wallet@EpicTipBot', 'Wallet', ]
             }

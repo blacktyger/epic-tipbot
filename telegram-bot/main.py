@@ -563,20 +563,30 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
 @dp.message_handler(commands=COMMANDS['start'])
 async def start(message: types.Message):
     private_chat = message.from_user.id
+    active_chat = message.chat.id
     media = types.MediaGroup()
     media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
                        caption=Tipbot.HELP_STRING, parse_mode=ParseMode.MARKDOWN)
-    await bot.send_media_group(chat_id=private_chat, media=media)
+
+    if Tipbot.ADMIN_ID in private_chat:
+        await bot.send_media_group(chat_id=active_chat, media=media)
+    else:
+        await bot.send_media_group(chat_id=private_chat, media=media)
 
 
 # /------ FAQ HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['faq'])
 async def start(message: types.Message):
     private_chat = message.from_user.id
+    active_chat = message.chat.id
     media = types.MediaGroup()
     media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
                        caption=Tipbot.FAQ_STRING, parse_mode=ParseMode.MARKDOWN)
-    await bot.send_media_group(chat_id=private_chat, media=media)
+
+    if Tipbot.ADMIN_ID in private_chat:
+        await bot.send_media_group(chat_id=active_chat, media=media)
+    else:
+        await bot.send_media_group(chat_id=private_chat, media=media)
 
 
 # /------ DISPLAY DEPOSIT ADDRESS HANDLE ------\ #

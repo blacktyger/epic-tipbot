@@ -47,6 +47,7 @@ class MarketData:
 
 
 class Tipbot:
+    ADMIN_ID = '803516752'
     DONATION_ADDRESS = 'vite_0ab437d8a54d52abc802c0e75210885e761d328eaefed14204'
     HELP_STRING = \
 """
