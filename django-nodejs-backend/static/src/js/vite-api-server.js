@@ -40,7 +40,6 @@ app.post('/create/', (req, res) => {
 app.post('/balance/', async (req, res) => {
     // Get balance
      try {
-        console.log(req.body.mnemonics)
         const { balance, unreceived } = await checkBalance(req.body.mnemonics)
         console.log(balance, unreceived)
 
@@ -64,7 +63,6 @@ app.post('/balance/', async (req, res) => {
 
 app.post('/send_transaction/', async (req, res) => {
     const { mnemonics, toAddress, tokenId, amount } = req.body
-    console.log(mnemonics)
     try {
         // Prepare transaction
         const tx = await sendTransaction(mnemonics, toAddress, tokenId, amount)

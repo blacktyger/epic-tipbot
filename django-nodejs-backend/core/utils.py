@@ -37,7 +37,7 @@ def receive_transactions(wallet: Wallet):
     :param wallet: Wallet model instance
     :return: None, background thread
     """
-    params = {'mnemonics': wallet.mnemonics}
+    params = {'mnemonics': wallet.decrypt_mnemonics()}
     balance = vite_api_call(query='balance', params=params)
 
     if not balance['error']:
