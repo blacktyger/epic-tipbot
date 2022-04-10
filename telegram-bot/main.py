@@ -144,7 +144,7 @@ async def wallet(message: types.Message, state: FSMContext):
 
     # Prepare updated GUI string
     if 'EPIC' in response['data'].keys():
-        epic_balance = response['data']['EPIC']
+        epic_balance = tools.float_to_str(response['data']['EPIC'])
     else:
         epic_balance = 0.0
 
@@ -775,7 +775,7 @@ async def inline_welcome(inline_query: InlineQuery):
             lines = ['Please setup your account and wallet', f"Talk to @{bot_name.username}"]
         else:
             if 'EPIC' in response['data'].keys():
-                epic_balance = response['data']['EPIC']
+                epic_balance = tools.float_to_str(response['data']['EPIC'])
             else:
                 epic_balance = 0.0
 
