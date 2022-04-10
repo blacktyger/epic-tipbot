@@ -194,7 +194,10 @@ async def remove_state_messages(state: FSMContext):
 
         # Remove messages
         if f'msg_{state_.split(":")[-1]}' in data.keys():
-            logger.info('DELETE MSG: ', data[f'msg_{state_.split(":")[-1]}']['text'])
+            try:
+                logger.info('DELETE MSG: ', data[f'msg_{state_.split(":")[-1]}']['id'])
+            except Exception:
+                pass
             try:
                 await data[f'msg_{state_.split(":")[-1]}'].delete()
             except MessageToDeleteNotFound:

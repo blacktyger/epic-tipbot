@@ -1,7 +1,5 @@
-import hashlib
-
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InlineQuery, InlineQueryResultArticle, \
-    InputTextMessageContent
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InlineQuery, \
+    InlineQueryResultArticle, InputTextMessageContent
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
@@ -10,6 +8,7 @@ from decimal import Decimal
 from aiogram import *
 
 import requests
+import hashlib
 import json
 import time
 
@@ -31,6 +30,7 @@ TIPBOT_API_URL = Database.TIPBOT_URL
 PRICE = MarketData()
 COMMANDS = tools.COMMANDS
 
+
 # Wallet GUI buttons callback
 wallet_cb = CallbackData('wallet', 'action', 'user', 'username')
 donate_cb = CallbackData('donate', 'action', 'amount')
@@ -49,67 +49,7 @@ class SendStates(StatesGroup):
 
 class DonateStates(StatesGroup):
     ask_for_amount = State()
-    amount_from_button = State()
     confirmation = State()
-
-
-# //-- BALANCE INLINE -- \\ #
-@dp.inline_handler(lambda inline_query: 'wallet' in inline_query.query)
-async def inline_welcome(inline_query: InlineQuery):
-    query = 'balance'
-    full_url = f'{TIPBOT_API_URL}/{query}/'
-    user = inline_query['from'].__dict__['_values']
-    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
-    thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
-    title = "EPIC Tip-Bot Wallet"
-    bot_name = await bot.get_me()
-
-    response = requests.post(url=full_url, data=json.dumps(user))
-
-    if response.status_code == 200:
-        response = json.loads(response.content)
-
-        if response['error']:
-            lines = ['Please setup your account and wallet', f"Talk to @{bot_name.username}"]
-        else:
-            if 'EPIC' in response['data'].keys():
-                epic_balance = response['data']['EPIC']
-            else:
-                epic_balance = 0.0
-
-            lines = [f"Balance: {epic_balance} EPIC"]
-
-        item = InlineQueryResultArticle(
-            id=result_id,
-            title=title,
-            description='\n'.join(lines),
-            thumb_url=thumb_url,
-            input_message_content=InputTextMessageContent(f'Manage your wallet: @{bot_name.username}', parse_mode=ParseMode.HTML)
-            )
-        await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
-
-
-# // -- TIP INLINE -- \\ #
-@dp.inline_handler(lambda inline_query: 'tip' in inline_query.query)
-async def inline_welcome(inline_query: InlineQuery):
-    """
-    User can type in any chat window `tip @username amount` and click
-    InlineQueryResult to send as ready /tip command
-    """
-    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
-    thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
-    title = "Send Epic-Cash TIP"
-    lines = [f"type @username and amount",
-             "and click here"]
-
-    item = InlineQueryResultArticle(
-        id=result_id,
-        title=title,
-        description='\n'.join(lines),
-        thumb_url=thumb_url,
-        input_message_content=InputTextMessageContent(inline_query.query, parse_mode=ParseMode.HTML)
-        )
-    await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
 
 
 # /------ CREATE ACCOUNT HANDLE ------\ #
@@ -127,7 +67,7 @@ async def create(message: types.Message):
         msg = f"✅ Account created successfully!\n\n" \
               f"▪️️ [WALLET SEEDPHRASE AND PASSWORD]({response['data']})\n\n" \
               f"▪️️ Please backup message from link ️\n" \
-              f"▪️️ Open your wallet 👉 /wallet" \
+              f"▪️️ Open your wallet 👉 /wallet"
 
     else:
         if 'account already active' in response['msg']:
@@ -453,7 +393,8 @@ async def handle_donate_amount(query: types.CallbackQuery, state: FSMContext):
     await state.update_data(address=Tipbot.DONATION_ADDRESS)
 
     data = await state.get_data()
-    private_chat = data['active_user']['id']
+    private_chat = data['active_user']['id'] if 'active_user' in data.keys() \
+        else query.message.chat.id
 
     # Prepare confirmation string and keyboard
     confirmation_string = f" ☑️ Confirm your donation:\n\n" \
@@ -494,9 +435,14 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     private_chat = data['active_user']['id'] if 'active_user' in data.keys() else None
 
-    # TODO: Better handle for no active_user case
+    # Handle active_user is None (for whatever reason)
     if not private_chat:
-        return
+        private_chat = query.message.chat.id
+        data['active_user'] = {'id': query.message.chat.id}
+
+    # Remove keyboard and display processing msg
+    conf_msg = f"⏳ Processing transaction.."
+    await data['msg_confirmation'].edit_text(text=conf_msg, reply_markup=None, parse_mode=ParseMode.MARKDOWN)
 
     # Build and send withdraw transaction
     request_data = {
@@ -536,7 +482,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     await tools.remove_state_messages(state)
 
     amount = tools.float_to_str(data['amount'])
-    sender = f"*@{request_data['sender']['username']}*"
+    sender = f"*@{request_data['sender']['username']}*" if 'username' in request_data['sender'].keys() else '*Unknown*'
 
     # Create Vitescan.io explorer link to transaction
     transaction_hash = response['data']['transaction']['data']['hash']
@@ -545,7 +491,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     # Prepare user confirmation message
     private_msg = f"✅ Transaction sent successfully\n" \
                   f"▪️ [Transaction details (vitescan.io)]({explorer_url})"
-    receiver_msg = f"💸   `{amount} EPIC from`   {sender}"
+    receiver_msg = f"💸 `{amount} EPIC from` {sender}"
 
     # Send tx confirmation to sender's private chat
     await send_message(text=private_msg, chat_id=private_chat)
@@ -755,7 +701,8 @@ async def donation(message: types.Message):
 
 # /------ TIP EPIC HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['tip'])
-@dp.message_handler(lambda message: message.text.startswith('tip'))
+@dp.message_handler(lambda message: message.text.startswith('tip', 'Tip')
+                                    and len(message.text.split(' ')) < 4)
 async def tip(message: types.Message):
     query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{query}/'
@@ -806,6 +753,66 @@ async def tip(message: types.Message):
         await send_message(text=msg, chat_id=private_chat)
 
     await message.delete()
+
+
+# //-- BALANCE INLINE -- \\ #
+@dp.inline_handler(lambda inline_query: 'wallet' in inline_query.query)
+async def inline_welcome(inline_query: InlineQuery):
+    query = 'balance'
+    full_url = f'{TIPBOT_API_URL}/{query}/'
+    user = inline_query['from'].__dict__['_values']
+    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
+    thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
+    title = "EPIC Tip-Bot Wallet"
+    bot_name = await bot.get_me()
+
+    response = requests.post(url=full_url, data=json.dumps(user))
+
+    if response.status_code == 200:
+        response = json.loads(response.content)
+
+        if response['error']:
+            lines = ['Please setup your account and wallet', f"Talk to @{bot_name.username}"]
+        else:
+            if 'EPIC' in response['data'].keys():
+                epic_balance = response['data']['EPIC']
+            else:
+                epic_balance = 0.0
+
+            lines = [f"Balance: {epic_balance} EPIC"]
+
+        item = InlineQueryResultArticle(
+            id=result_id,
+            title=title,
+            description='\n'.join(lines),
+            thumb_url=thumb_url,
+            input_message_content=InputTextMessageContent(f'Manage your wallet: @{bot_name.username}',
+                                                          parse_mode=ParseMode.HTML)
+            )
+        await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
+
+
+# // -- TIP INLINE -- \\ #
+@dp.inline_handler(lambda inline_query: 'tip' in inline_query.query)
+async def inline_welcome(inline_query: InlineQuery):
+    """
+    User can type in any chat window `tip @username amount` and click
+    InlineQueryResult to send as ready /tip command
+    """
+    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
+    thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
+    title = "Send Epic-Cash TIP"
+    lines = [f"type @username and amount",
+             "and click here"]
+
+    item = InlineQueryResultArticle(
+        id=result_id,
+        title=title,
+        description='\n'.join(lines),
+        thumb_url=thumb_url,
+        input_message_content=InputTextMessageContent(inline_query.query, parse_mode=ParseMode.HTML)
+        )
+    await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
 
 
 async def send_message(**kwargs):
