@@ -30,7 +30,6 @@ TIPBOT_API_URL = Database.TIPBOT_URL
 PRICE = MarketData()
 COMMANDS = tools.COMMANDS
 
-
 # Wallet GUI buttons callback
 wallet_cb = CallbackData('wallet', 'action', 'user', 'username')
 donate_cb = CallbackData('donate', 'action', 'amount')
@@ -42,10 +41,12 @@ class WithdrawStates(StatesGroup):
     ask_for_amount = State()
     confirmation = State()
 
+
 class SendStates(StatesGroup):
     ask_for_recipient = State()
     ask_for_amount = State()
     confirmation = State()
+
 
 class DonateStates(StatesGroup):
     ask_for_amount = State()
@@ -701,8 +702,8 @@ async def donation(message: types.Message):
 
 # /------ TIP EPIC HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['tip'])
-@dp.message_handler(lambda message: message.text.startswith('tip', 'Tip')
-                                    and len(message.text.split(' ')) < 4)
+@dp.message_handler(lambda message: message.text.startswith(('tip', 'Tip'))
+                    and len(message.text.split(' ')) < 4)
 async def tip(message: types.Message):
     query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{query}/'
