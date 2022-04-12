@@ -164,6 +164,7 @@ def get_receiver(message: types.Message) -> Union[str, None]:
     :return: receiver string or None
     """
     for match in message.entities:
+        print(match)
         if match['type'] == 'mention':
             start = match['offset']
             stop = start + match['length']
