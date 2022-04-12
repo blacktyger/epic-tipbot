@@ -170,10 +170,10 @@ def get_receiver(message: types.Message) -> Union[str, None]:
                 stop = start + match['length']
                 return message.text[start:stop].replace('@', '').lower()
     else:
-        print(message.html_text)
-        print(message.parse_entities(as_html=True))
-        print(message.parse_entities())
-
+        try:
+            return message.parse_entities().split(' ')[1].lower()
+        except Exception as e:
+            logger.error(f'Error parsing receiver {e}')
 
     return None
 
