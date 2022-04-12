@@ -695,11 +695,13 @@ async def tip(message: types.Message):
 
             if not response['error']:
                 explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
-                receiver = data['data']['receiver']['username']
-                private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to *@{receiver}*\n" \
+                receiver = tools.TipBotUser(response['data']['receiver']['id'])
+                sender = tools.TipBotUser(data['data']['sender']['id'])
+
+                private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to {receiver.get_url()}\n" \
                               f"▫️ [Tip details]({explorer_url})"
-                public_msg = f"❤️ *@{data['data']['sender']['username']} {tools.float_to_str(data['data']['amount'])} TIP to @{data['data']['receiver']['username']}*"
-                receiver_msg = f"💸 {tools.float_to_str(data['data']['amount'])} EPIC from *@{data['data']['sender']['username']}*"
+                public_msg = f"❤️ {sender.get_url()} tipped {tools.float_to_str(data['data']['amount'])} EPIC to {receiver.get_url()}"
+                receiver_msg = f"💸 {tools.float_to_str(data['data']['amount'])} EPIC from {sender.get_url()}"
 
                 # Send tx confirmation to sender's private chat
                 if not response['data']['receiver']['is_bot']:

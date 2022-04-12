@@ -156,6 +156,8 @@ class TipBotUser:
             else:
                 setattr(self, key, value)
 
+    def get_url(self):
+        return f"[{self.username}](tg://user?id={self.id})"
 
 def get_receiver(message: types.Message) -> Union[str, None]:
     """
