@@ -413,8 +413,8 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     api_query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{api_query}/'
     data = await state.get_data()
-    user_obj = tools.TipBotUser(id=query.message.chat.id)
-    private_chat = user_obj.id
+    sender = tools.TipBotUser(id=query.message.chat.id)
+    private_chat = sender.id
 
     # Remove keyboard and display processing msg
     conf_msg = f"⏳ Processing transaction.."
@@ -422,7 +422,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
 
     # Build and send withdraw transaction
     request_data = {
-        'sender': {'id': user_obj.id, 'username': user_obj.username},
+        'sender': {'id': sender.id, 'username': sender.username},
         'receiver': data['recipient'] if 'recipient' in data.keys() else {'username': None},
         'address': data['address'] if 'address' in data.keys() else None,
         'amount': data['amount']
@@ -458,7 +458,6 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     await tools.remove_state_messages(state)
 
     amount = tools.float_to_str(data['amount'])
-    sender = f"*@{request_data['sender']['username']}*"
 
     # Create Vitescan.io explorer link to transaction
     transaction_hash = response['data']['transaction']['data']['hash']
@@ -467,7 +466,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     # Prepare user confirmation message
     private_msg = f"✅ Transaction sent successfully\n" \
                   f"▪️ [Transaction details (vitescan.io)]({explorer_url})"
-    receiver_msg = f"💸 `{amount} EPIC from` {sender}"
+    receiver_msg = f"💸 `{amount} EPIC from` {sender.get_url()}"
 
     # Send tx confirmation to sender's private chat
     await send_message(text=private_msg, chat_id=private_chat)
@@ -498,7 +497,7 @@ async def start(message: types.Message):
 
 # /------ FAQ HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['faq'])
-async def start(message: types.Message):
+async def faq(message: types.Message):
     private_chat = message.from_user.id
     active_chat = message.chat.id
     media = types.MediaGroup()
@@ -683,48 +682,49 @@ async def tip(message: types.Message):
 
     data = tools.parse_tip_command(message)
 
-    # Prepare and validate sending params
-    if not data['error']:
-        response = requests.post(url=full_url, data=json.dumps(data['data']))
-
-        if response.status_code == 200:
-            response = json.loads(response.content)
-
-            if not response['error']:
-                explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
-                receiver = tools.TipBotUser(response['data']['receiver']['id'])
-                sender = tools.TipBotUser(data['data']['sender']['id'])
-
-                private_msg = f"✅ {tools.float_to_str(data['data']['amount'])} EPIC to {receiver.get_url()}\n" \
-                              f"▫️ [Tip details]({explorer_url})"
-                public_msg = f"❤️ {sender.get_url()} tipped {tools.float_to_str(data['data']['amount'])} EPIC to {receiver.get_url()}"
-                receiver_msg = f"💸 {tools.float_to_str(data['data']['amount'])} EPIC from {sender.get_url()}"
-
-                # Send tx confirmation to sender's private chat
-                if not response['data']['receiver']['is_bot']:
-                    await send_message(text=private_msg, chat_id=private_chat)
-
-                # Send notification to receiver's private chat
-                if 'receiver' in response['data'].keys():
-                    if not response['data']['receiver']['is_bot']:
-                        await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
-
-                # Replace original /tip user message with tip confirmation in active channel
-                await send_message(text=public_msg, chat_id=active_chat)
-            else:
-                if 'sendBlock.Height must be larger than 1' in response['msg']:
-                    msg = f"🔴 Your wallet is empty."
-                else:
-                    msg = f"🔴 {response['msg']}"
-                await send_message(text=msg, chat_id=private_chat)
-        else:
-            msg = f"🔴 Tip send error"
-            await send_message(text=msg, chat_id=private_chat)
-
-    else:
+    if data['error']:
         logger.error(data['msg'])
         msg = f"🔴 {data['msg']}"
         await send_message(text=msg, chat_id=private_chat)
+        return
+
+    response = requests.post(url=full_url, data=json.dumps(data['data']))
+
+    if response.status_code != 200:
+        msg = f"🔴 Tip send error"
+        await send_message(text=msg, chat_id=private_chat)
+        return
+
+    response = json.loads(response.content)
+
+    if response['error']:
+        if 'sendBlock.Height must be larger than 1' in response['msg']:
+            msg = f"🔴 Your wallet is empty."
+        else:
+            msg = f"🔴 {response['msg']}"
+        await send_message(text=msg, chat_id=private_chat)
+        return
+
+    explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
+    receiver = tools.TipBotUser(response['data']['receiver']['id'])
+    sender = tools.TipBotUser(data['data']['sender']['id'])
+    amount = tools.float_to_str(data['data']['amount'])
+
+    public_msg = f"❤️ {sender.get_url()} tipped `{amount} " \
+                 f"EPIC` to {receiver.get_url()}"
+    private_msg = f"✅ `{amount} EPIC` to {receiver.get_url()}\n" \
+                  f"▫️ [Tip details]({explorer_url})"
+    receiver_msg = f"💸 `{amount} EPIC` from {sender.get_url()}"
+
+    # Send tx confirmation to sender's private chat
+    if not receiver.is_bot:
+        await send_message(text=private_msg, chat_id=private_chat)
+
+    # Send notification to receiver's private chat
+    await send_message(text=receiver_msg, chat_id=receiver.id)
+
+    # Replace original /tip user message with tip confirmation in active channel
+    await send_message(text=public_msg, chat_id=active_chat)
 
     await message.delete()
 
