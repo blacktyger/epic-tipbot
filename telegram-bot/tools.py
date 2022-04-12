@@ -165,21 +165,18 @@ def get_receiver(message: types.Message) -> Union[str, None]:
     :param message: types.Message (AIOGRAM)
     :return: receiver string or None
     """
-    print(message.__dict__)
-    print(message.entities)
     if len(message.entities) > 0:
         for match in message.entities:
             print(match)
-            if match['type'] == 'mention':
+            if 'mention' in match['type']:
                 start = match['offset']
                 stop = start + match['length']
-                print(message.text[start:stop].replace('@', '').lower())
                 return message.text[start:stop].replace('@', '').lower()
     else:
-        # try:
-        return message.parse_entities().split(' ')[1].lower()
-        # except Exception as e:
-        #     logger.error(f'Error parsing receiver {e}')
+        try:
+            return message.parse_entities().split(' ')[1].lower()
+        except Exception as e:
+            logger.error(f'Error parsing receiver {e}')
 
     return None
 
