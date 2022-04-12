@@ -173,6 +173,7 @@ def get_receiver(message: types.Message) -> Union[str, None]:
             if match['type'] == 'mention':
                 start = match['offset']
                 stop = start + match['length']
+                print(message.text[start:stop].replace('@', '').lower())
                 return message.text[start:stop].replace('@', '').lower()
     else:
         # try:
