@@ -542,11 +542,8 @@ async def address(message: types.Message, custom_user=None):
 # /------ DISPLAY BALANCE HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['balance'])
 async def balance(message: types.Message):
-    query = 'balance'
-    full_url = f'{TIPBOT_API_URL}/{query}/'
     private_chat = message.from_user.id
-    user, message_ = tools.parse_user_and_message(message)
-    user_obj = tools.TipBotUser(id=query.message.chat.id)
+    user_obj = tools.TipBotUser(id=message.from_user.id)
 
     response = user_obj.wallet.epic_balance()
 
