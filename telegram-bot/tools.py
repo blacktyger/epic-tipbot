@@ -165,6 +165,8 @@ def get_receiver(message: types.Message) -> Union[str, None]:
     :param message: types.Message (AIOGRAM)
     :return: receiver string or None
     """
+    print(message.__dict__)
+    print(message.entities)
     if len(message.entities) > 0:
         for match in message.entities:
             if match['type'] == 'mention':
