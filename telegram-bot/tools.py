@@ -231,6 +231,8 @@ def parse_tip_command(message: types.Message) -> dict:
     receiver = {'username': get_receiver(message)}
     amount = get_amount(message)
 
+    print(receiver)
+
     if not receiver['username']:
         return {'error': 1, 'msg': 'Invalid recipient username.', 'data': None}
 
