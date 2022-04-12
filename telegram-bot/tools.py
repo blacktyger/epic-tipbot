@@ -122,7 +122,7 @@ class TipBotUser:
                  id: Union[str, int] = None,
                  is_bot: bool = False,
                  wallet: TipBotWallet = None,
-                 username: str = None,
+                 username: str = '',
                  first_name: str = None,
                  language_code: str = None):
 

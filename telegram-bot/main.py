@@ -264,6 +264,7 @@ async def handle_send_recipient(message: types.Message, state: FSMContext):
     private_chat = message.from_user.id
 
     # Validate recipient and save to storage
+    logger.info(mess)
     if message.entities:
         recipient = message.parse_entities().replace('@', '')
         await state.update_data(recipient={'username': recipient})
