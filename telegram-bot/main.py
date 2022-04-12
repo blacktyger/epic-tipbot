@@ -4,7 +4,6 @@ from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 from aiogram.types import ParseMode
-from decimal import Decimal
 from aiogram import *
 
 import requests
@@ -82,8 +81,6 @@ async def create(message: types.Message):
 # /------ WALLET GUI HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['wallet'], state='*')
 async def wallet(message: types.Message, state: FSMContext):
-    query = 'balance'
-    full_url = f'{TIPBOT_API_URL}/{query}/'
     private_chat = message.from_user.id
     user, _ = tools.parse_user_and_message(message)
 
@@ -98,28 +95,16 @@ async def wallet(message: types.Message, state: FSMContext):
     wallet_gui = await send_message(
         text=strings.loading_wallet_1(), chat_id=private_chat, reply_markup=keyboard)
 
-    # Get Epic-Cash price in USD from Coingecko API
-    epic_vs_usd = PRICE.price_epic_vs('USD')
-
     # Save user dict to temp storage
     await state.update_data(active_user=user)
 
-    # Send POST request to get wallet balance from network
-    try:
-        response = requests.post(url=full_url, data=json.dumps(user))
-    except requests.exceptions.ConnectionError:
-        # Update loading wallet GUI to error wallet
-        await wallet_gui.edit_text(text=strings.connection_error_wallet(),
-                                   reply_markup=keyboard,
-                                   parse_mode=ParseMode.MARKDOWN)
-        return
-
-    # Serialize POST request response
-    response = json.loads(response.content)
+    # Create user object and send request to database
+    user_obj = tools.TipBotUser(id=user['id'])
+    response = user_obj.wallet.epic_balance()
 
     # Handle response error
     if response['error']:
-        if 'Connection problems' in response['msg']:
+        if 'connection error' in response['msg']:
             text = strings.connection_error_wallet()
         else:
             text = strings.invalid_wallet()
@@ -134,8 +119,7 @@ async def wallet(message: types.Message, state: FSMContext):
         await wallet_gui.edit_text(text=strings.loading_wallet_2(),
                                    reply_markup=keyboard,
                                    parse_mode=ParseMode.MARKDOWN)
-        response = requests.post(url=full_url, data=json.dumps(user))
-        response = json.loads(response.content)
+        response = user_obj.wallet.epic_balance()
         status = response['msg']
         time.sleep(0.3)
         await wallet_gui.edit_text(text=strings.loading_wallet_1(),
@@ -143,13 +127,8 @@ async def wallet(message: types.Message, state: FSMContext):
                                    parse_mode=ParseMode.MARKDOWN)
         time.sleep(0.3)
 
-    # Prepare updated GUI string
-    if 'EPIC' in response['data'].keys():
-        epic_balance = tools.float_to_str(response['data']['EPIC'])
-    else:
-        epic_balance = 0.0
-
-    balance_in_usd = f"{round(Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+    # Prepare GUI strings
+    epic_balance, balance_in_usd = response['data']['string']
     wallet_gui_string = strings.ready_wallet(epic_balance, balance_in_usd)
 
     # Save epic_balance to temp storage
@@ -434,12 +413,8 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     api_query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{api_query}/'
     data = await state.get_data()
-    private_chat = data['active_user']['id'] if 'active_user' in data.keys() else None
-
-    # Handle active_user is None (for whatever reason)
-    if not private_chat:
-        private_chat = query.message.chat.id
-        data['active_user'] = {'id': query.message.chat.id}
+    user_obj = tools.TipBotUser(id=query.message.chat.id)
+    private_chat = user_obj.id
 
     # Remove keyboard and display processing msg
     conf_msg = f"⏳ Processing transaction.."
@@ -447,7 +422,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
 
     # Build and send withdraw transaction
     request_data = {
-        'sender': data['active_user'],
+        'sender': {'id': user_obj.id, 'username': user_obj.username},
         'receiver': data['recipient'] if 'recipient' in data.keys() else {'username': None},
         'address': data['address'] if 'address' in data.keys() else None,
         'amount': data['amount']
@@ -483,7 +458,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     await tools.remove_state_messages(state)
 
     amount = tools.float_to_str(data['amount'])
-    sender = f"*@{request_data['sender']['username']}*" if 'username' in request_data['sender'].keys() else '*Unknown*'
+    sender = f"*@{request_data['sender']['username']}*"
 
     # Create Vitescan.io explorer link to transaction
     transaction_hash = response['data']['transaction']['data']['hash']
@@ -571,9 +546,9 @@ async def balance(message: types.Message):
     full_url = f'{TIPBOT_API_URL}/{query}/'
     private_chat = message.from_user.id
     user, message_ = tools.parse_user_and_message(message)
+    user_obj = tools.TipBotUser(id=query.message.chat.id)
 
-    response = requests.post(url=full_url, data=json.dumps(user))
-    response = json.loads(response.content)
+    response = user_obj.wallet.epic_balance()
 
     if not response['error']:
         status = response['msg']
@@ -587,8 +562,7 @@ async def balance(message: types.Message):
                 await reply.edit_text(f"◾️ {response['data']}")
                 time.sleep(0.7)
                 await reply.edit_text(f"▫️ {response['data']}")
-                response = requests.post(url=full_url, data=json.dumps(user))
-                response = json.loads(response.content)
+                response = user_obj.wallet.epic_balance()
                 status = response['msg']
 
             await reply.delete()
@@ -758,44 +732,39 @@ async def tip(message: types.Message):
 
 # //-- BALANCE INLINE -- \\ #
 @dp.inline_handler(lambda inline_query: 'wallet' in inline_query.query)
-async def inline_welcome(inline_query: InlineQuery):
-    query = 'balance'
-    full_url = f'{TIPBOT_API_URL}/{query}/'
+async def inline_balance(inline_query: InlineQuery):
     user = inline_query['from'].__dict__['_values']
     result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
     thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
     title = "EPIC Tip-Bot Wallet"
     bot_name = await bot.get_me()
+    user_obj = tools.TipBotUser(id=user['id'])
+    response = user_obj.wallet.epic_balance()
 
-    response = requests.post(url=full_url, data=json.dumps(user))
-
-    if response.status_code == 200:
-        response = json.loads(response.content)
-
-        if response['error']:
-            lines = ['Please setup your account and wallet', f"Talk to @{bot_name.username}"]
+    if response['error']:
+        lines = ['Please setup your account and wallet', f"Talk to @{bot_name.username}"]
+    else:
+        if 'EPIC' in response['data'].keys():
+            epic_balance = tools.float_to_str(response['data']['EPIC'])
         else:
-            if 'EPIC' in response['data'].keys():
-                epic_balance = tools.float_to_str(response['data']['EPIC'])
-            else:
-                epic_balance = 0.0
+            epic_balance = 0.0
 
-            lines = [f"Balance: {epic_balance} EPIC"]
+        lines = [f"Balance: {epic_balance} EPIC"]
 
-        item = InlineQueryResultArticle(
-            id=result_id,
-            title=title,
-            description='\n'.join(lines),
-            thumb_url=thumb_url,
-            input_message_content=InputTextMessageContent(f'Manage your wallet: @{bot_name.username}',
-                                                          parse_mode=ParseMode.HTML)
-            )
-        await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
+    item = InlineQueryResultArticle(
+        id=result_id,
+        title=title,
+        description='\n'.join(lines),
+        thumb_url=thumb_url,
+        input_message_content=InputTextMessageContent(f'Manage your wallet: @{bot_name.username}',
+                                                      parse_mode=ParseMode.HTML)
+        )
+    await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
 
 
 # // -- TIP INLINE -- \\ #
 @dp.inline_handler(lambda inline_query: 'tip' in inline_query.query)
-async def inline_welcome(inline_query: InlineQuery):
+async def inline_tip(inline_query: InlineQuery):
     """
     User can type in any chat window `tip @username amount` and click
     InlineQueryResult to send as ready /tip command
@@ -832,17 +801,24 @@ async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
 
     # Clean temp storage except active_user
     data = await state.get_data()
+    print(data)
 
     if 'active_user' in data.keys():
         user = data['active_user']
         await state.reset_data()
         await state.update_data(active_user=user)
+        data = await state.get_data()
+        print(data)
     else:
+        data = await state.get_data()
         await state.reset_data()
+        print(data)
 
     # Reset state
     logger.info(f"Reset state")
-    await state.finish()
+    await state.reset_state(with_data=False)
+    data = await state.get_data()
+    print(data)
     await query.answer()
 
 

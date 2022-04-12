@@ -172,7 +172,7 @@ def send_transaction(request):
         tx.save()
         response = {'error': 1, 'msg': transaction['msg'], 'data': None}
 
-    print('send_transaction: ', response['msg'])
+    print(f'[{sender_wallet}] send_transaction: ', response['msg'])
     return JsonResponse(response)
 
 
@@ -187,7 +187,7 @@ def get_address(request):
     wallet = Wallet.objects.filter(user__id=user['id']).first()
 
     if wallet:
-        response = {'error': 0, 'msg': 'success _get_address_ call', 'data': wallet.address}
+        response = {'error': 0, 'msg': f'[{wallet}] success _get_address_ call', 'data': wallet.address}
 
     return JsonResponse(response)
 
@@ -216,6 +216,6 @@ def get_balance(request):
         else:
             response = {'error': 1, 'msg': balance['msg'], 'data': None}
 
-    print('get_balance: ', response['msg'])
+    print(f"[{wallet}] get_balance: {response['msg']}")
     return JsonResponse(response)
 

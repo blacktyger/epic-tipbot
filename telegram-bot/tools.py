@@ -4,16 +4,22 @@ from aiogram.contrib.fsm_storage.files import PickleStorage
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 from aiogram import types
-from typing import Union
+import requests
 
+from typing import Union
 import decimal
+import json
 import os
 
 from logger_ import logger
+from settings import Database, MarketData
 
 
 ctx = decimal.Context()
+PRICE = MarketData()
 ctx.prec = 20
+DJANGO_API_URL = Database.API_URL
+TIPBOT_API_URL = Database.TIPBOT_URL
 
 
 def float_to_str(f):
@@ -41,6 +47,116 @@ def get_amount(message: types.Message) -> Union[float, None]:
     return None
 
 
+class TipBotWallet:
+    """
+    Deserialize Wallet JSON data from database and save as object.
+    """
+    def __init__(self,
+                 address: str = None,
+                 balance: dict = None
+                 ):
+        self.address = address
+        self.balance = balance
+        self.user = int
+
+        if not self.address:
+            logger.error(f'No address provided.')
+            return
+
+        # Prepare database query
+        query = 'wallets'
+        params = {'address': address}
+        full_url = f'{DJANGO_API_URL}/{query}/'
+        response = requests.get(url=full_url, params=params)
+
+        if response.status_code != 200:
+            logger.error(f'Wallet Database error: {response.status_code}')
+            return
+
+        response = json.loads(response.content)[0]
+
+        for key, value in response.items():
+            setattr(self, key, value)
+
+    def epic_balance(self) -> dict:
+        # Send POST request to get wallet balance from network
+        query = 'balance'
+        full_url = f'{TIPBOT_API_URL}/{query}/'
+        request_data = {'id': self.user}
+
+        try:
+            response = requests.post(url=full_url, data=json.dumps(request_data))
+        except requests.exceptions.ConnectionError:
+            msg = f'{query} API call connection error.'
+            logger.error(msg)
+            return {'error': 1, 'msg': msg, 'data': None}
+
+        if response.status_code != 200:
+            msg = f'Wallet Database error: {response.status_code}'
+            logger.error(msg)
+            return {'error': 1, 'msg': msg, 'data': None}
+
+        response = json.loads(response.content)
+
+        if 'EPIC' in response['data'].keys():
+            epic_balance = float_to_str(response['data']['EPIC'])
+        else:
+            epic_balance = 0.0
+
+        # Get Epic-Cash price in USD from Coingecko API
+        epic_vs_usd = PRICE.price_epic_vs('USD')
+        balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+        response['data']['string'] = epic_balance, balance_in_usd
+
+        return response
+
+    def __repr__(self):
+        return f"TipBotWallet({self.address})"
+
+
+class TipBotUser:
+    """
+    Deserialize TelegramUser JSON data from database and save as object.
+    """
+    def __init__(self,
+                 id: Union[str, int] = None,
+                 is_bot: bool = False,
+                 wallet: TipBotWallet = None,
+                 username: str = None,
+                 first_name: str = None,
+                 language_code: str = None):
+
+        self.id = id
+        self.is_bot = is_bot
+        self.wallet = wallet
+        self.username = username.lower()
+        self.first_name = first_name
+        self.language_code = language_code
+
+        if not self.id and self.username:
+            logger.error(f'No username and id, provide at least one.')
+            return
+
+        # Prepare database query
+        query = 'users'
+        params = {'user_id': self.id, 'username': self.username}
+        full_url = f'{DJANGO_API_URL}/{query}/'
+        response = requests.get(url=full_url, params=params)
+
+        if response.status_code != 200:
+            logger.error(f'TelegramUser Database error: {response.status_code}')
+            return
+
+        response = json.loads(response.content)[0]
+        print(response)
+
+        for key, value in response.items():
+            if key == 'wallet':
+                setattr(self, key, TipBotWallet(address=value[0]))
+            else:
+                setattr(self, key, value)
+
+
 def get_receiver(message: types.Message) -> Union[str, None]:
     """
     Parse receiver username from user's messages
@@ -51,7 +167,7 @@ def get_receiver(message: types.Message) -> Union[str, None]:
         if match['type'] == 'mention':
             start = match['offset']
             stop = start + match['length']
-            return message.text[start:stop].replace('@', '')
+            return message.text[start:stop].replace('@', '').lower()
 
     return None
 
@@ -72,8 +188,11 @@ def get_address(message: types.Message) -> Union[str, None]:
 def parse_user_and_message(message: types.Message) -> tuple:
     """Parse from User and Message instance to dict"""
     user = message.from_user.__dict__['_values']
+
     if 'username' not in user.keys():
         user['username'] = user['first_name']
+
+    user['username'] = user['username'].lower()
 
     msg = {
         'id': message.message_id,

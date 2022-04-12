@@ -24,6 +24,23 @@ class TelegramUserView(viewsets.ModelViewSet):
         return queryset
 
 
+class TokenView(viewsets.ModelViewSet):
+    serializer_class = TokenSerializer
+
+    def get_queryset(self):
+        queryset = Token.objects.all()
+        symbol = self.request.query_params.get('symbol')
+        token_id = self.request.query_params.get('token_id')
+
+        if token_id:
+            queryset = queryset.filter(id=token_id)
+
+        if symbol:
+            queryset = queryset.filter(username=symbol)
+
+        return queryset
+
+
 class CreateTelegramUserView(CreateView):
     """
     Use to create new or update existing TelegramUser objects
