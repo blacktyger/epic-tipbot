@@ -163,13 +163,17 @@ def get_receiver(message: types.Message) -> Union[str, None]:
     :param message: types.Message (AIOGRAM)
     :return: receiver string or None
     """
-    print(message.__dict__)
-    for match in message.entities:
-        print(match)
-        if match['type'] == 'mention':
-            start = match['offset']
-            stop = start + match['length']
-            return message.text[start:stop].replace('@', '').lower()
+    if message.entities:
+        for match in message.entities:
+            if match['type'] == 'mention':
+                start = match['offset']
+                stop = start + match['length']
+                return message.text[start:stop].replace('@', '').lower()
+    else:
+        print(message.html_text)
+        print(message.parse_entities(as_html=True))
+        print(message.parse_entities())
+
 
     return None
 
