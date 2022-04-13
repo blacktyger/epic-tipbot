@@ -574,6 +574,8 @@ async def tip(message: types.Message):
         # Replace original /tip user message with tip confirmation in active channel
         await send_message(text=public_msg, chat_id=active_chat)
 
+        logger.info(f"{sender.username}: sent {amount} to {receiver}")
+
     await message.delete()
 
 
