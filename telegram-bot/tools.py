@@ -148,7 +148,6 @@ class TipBotUser:
             return
 
         response = json.loads(response.content)[0]
-        print(response)
 
         for key, value in response.items():
             if key == 'wallet':
@@ -159,25 +158,29 @@ class TipBotUser:
     def get_url(self):
         return f"[{self.username}](tg://user?id={self.id})"
 
-def get_receiver(message: types.Message) -> Union[str, None]:
+def get_receivers(message: types.Message) -> list:
     """
-    Parse receiver username from user's messages
+    Parse receiver username(s) from user's messages
     :param message: types.Message (AIOGRAM)
-    :return: receiver string or None
+    :return: receivers list
     """
+
+    receivers = []
+
     if len(message.entities) > 0:
         for match in message.entities:
             if 'mention' in match['type']:
                 start = match['offset']
                 stop = start + match['length']
-                return message.text[start:stop].replace('@', '').lower()
+                receivers.append(message.text[start:stop].replace('@', '').lower())
+        return receivers
     else:
         try:
-            return message.parse_entities().split(' ')[1].lower()
+            receivers.append(message.parse_entities().split(' ')[1].lower())
         except Exception as e:
             logger.error(f'Error parsing receiver {e}')
 
-    return None
+    return receivers
 
 
 def get_address(message: types.Message) -> Union[str, None]:
@@ -236,12 +239,10 @@ def parse_donation_command(message: types.Message) -> dict:
 def parse_tip_command(message: types.Message) -> dict:
     """Return data for TIP transaction"""
     sender, _ = parse_user_and_message(message)
-    receiver = {'username': get_receiver(message)}
+    receiver = [{'username': user} for user in get_receivers(message)]
     amount = get_amount(message)
 
-    print(receiver)
-
-    if not receiver['username']:
+    if not receiver:
         return {'error': 1, 'msg': 'Invalid recipient username.', 'data': None}
 
     if not amount:
@@ -261,10 +262,10 @@ def parse_send_command(message: types.Message) -> dict:
     """Return data for send transaction"""
     amount = get_amount(message)
     address = get_address(message)
-    receiver = {'username': get_receiver(message)}
+    receiver = {'username': get_receivers(message)[0]}
     sender, _ = parse_user_and_message(message)
 
-    logger.info(amount, sender['username'], '-->', receiver['username'], address)
+    logger.info(f"{amount} {sender['username']} --> {receiver['username']} {address}")
 
     if not amount:
         return {'error': 1, 'msg': 'Wrong amount value.', 'data': None}
@@ -317,9 +318,10 @@ def build_wallet_keyboard(user: dict, callback: CallbackData) -> InlineKeyboardM
 
 async def remove_state_messages(state: FSMContext):
     """Remove bot messages saved in temp storage"""
-    if await state.get_state():
+    state_ = await state.get_state()
+
+    if state_:
         data = await state.get_data()
-        state_ = await state.get_state()
 
         # Remove messages
         if f'msg_{state_.split(":")[-1]}' in data.keys():
@@ -346,9 +348,9 @@ def donate_keyboard():
     keyboard = InlineKeyboardMarkup()
     donate_1 = InlineKeyboardButton(text='1 EPIC', callback_data='donate_1')
     donate_5 = InlineKeyboardButton(text='5 EPIC', callback_data='donate_5')
-    donate_x = InlineKeyboardButton(text='10 EPIC', callback_data='donate_10')
+    donate_10 = InlineKeyboardButton(text='10 EPIC', callback_data='donate_10')
     button = InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
-    keyboard.row(donate_1, donate_5, donate_x).add(button)
+    keyboard.row(donate_1, donate_5, donate_10).add(button)
     return keyboard
 
 

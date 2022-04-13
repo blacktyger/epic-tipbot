@@ -75,6 +75,8 @@ async def create(message: types.Message):
         else:
             msg = f"🟡 {response['msg']}"
 
+        logger.error(f"{user['username']}: {msg}")
+
     await send_message(text=msg, chat_id=private_chat)
 
 
@@ -110,6 +112,7 @@ async def wallet(message: types.Message, state: FSMContext):
 
         # Update loading wallet GUI to error wallet
         await wallet_gui.edit_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+        logger.error(f"{user['username']}: {text}")
         return
 
     # Handle case when wallet needs to update new transactions
@@ -134,6 +137,8 @@ async def wallet(message: types.Message, state: FSMContext):
     await wallet_gui.edit_text(text=wallet_gui_string,
                                reply_markup=keyboard,
                                parse_mode=ParseMode.MARKDOWN)
+
+    logger.info(f"{user['username']}: wallet GUI loaded")
 
 
 # /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
@@ -304,9 +309,10 @@ async def handle_send_amount(message: types.Message, state: FSMContext):
         # Set new state
         await SendStates.confirmation.set()
         data = await state.get_data()
+        amount = tools.float_to_str(data['amount'])
 
         confirmation_string = f" ☑️ Confirm your send request:\n\n" \
-                              f"`▪️ Send {data['amount']} EPIC to` " \
+                              f"`▪️ Send {amount} EPIC to` " \
                               f"`@{data['recipient']['username']}`\n"
 
         confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
@@ -369,10 +375,11 @@ async def handle_donate_amount(query: types.CallbackQuery, state: FSMContext):
     await state.update_data(address=Tipbot.DONATION_ADDRESS)
 
     data = await state.get_data()
+    amount = tools.float_to_str(data['amount'])
 
     # Prepare confirmation string and keyboard
     confirmation_string = f" ☑️ Confirm your donation:\n\n" \
-                          f"`▪️ Send {data['amount']} EPIC to developer`"
+                          f"`▪️ Send {amount} EPIC to developer`"
 
     confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
     confirmation_keyboard.row(
@@ -426,6 +433,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
 
     if response.status_code != 200:
         msg = f"🔴 Transaction send error"
+        logger.error(f"{sender.username}: Database connection error")
         await send_message(text=msg, chat_id=private_chat)
         return
 
@@ -439,6 +447,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
         else:
             msg = f"🟡 {response['msg']}"
 
+        logger.error(f"{sender.username}: {response['msg']}")
         await send_message(text=msg, chat_id=private_chat)
         await tools.remove_state_messages(state)
         await query.answer()
@@ -456,9 +465,13 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     explorer_url = tools.vitescan_tx_url(transaction_hash)
 
     # Prepare user confirmation message
+    amount = tools.float_to_str(data['amount'])
+    receiver = tools.TipBotUser(id=response['data']['receiver']['id']).username \
+        if 'receiver' in response['data'].keys() else data['address']
+
     private_msg = f"✅ Transaction sent successfully\n" \
                   f"▪️ [Transaction details (vitescan.io)]({explorer_url})"
-    receiver_msg = f"💸 `{tools.float_to_str(data['amount'])} EPIC from` {sender.get_url()}"
+    receiver_msg = f"💸 `{amount} EPIC from` {sender.get_url()}"
 
     # Send tx confirmation to sender's private chat
     await send_message(text=private_msg, chat_id=private_chat)
@@ -471,16 +484,19 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
     await state.finish()
     await query.answer()
 
+    logger.info(f"{sender.username}: sent {amount} to {receiver}")
+
 
 # /------ TIP EPIC HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['tip'])
 @dp.message_handler(lambda message: message.text.startswith(('tip', 'Tip'))
-                    and len(message.text.split(' ')) < 4)
+                    and 2 < len(message.text.split(' ')) < 10)
 async def tip(message: types.Message):
     query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{query}/'
     active_chat = message.chat.id
     private_chat = message.from_user.id
+    max_receivers = 5
 
     data = tools.parse_tip_command(message)
 
@@ -491,48 +507,72 @@ async def tip(message: types.Message):
         await send_message(text=msg, chat_id=private_chat)
         return
 
-    response = requests.post(url=full_url, data=json.dumps(data['data']))
+    # Handle case when tip command have wrong syntax
+    if len(message.text.split(' ')) - len(data['data']['receiver']) != 2:
+        logger.error('wrong tip command')
+        return
 
-    # Handle error with connection to database
-    if response.status_code != 200:
-        msg = f"🔴 Tip send error"
+    # Handle too many receivers:
+    if len(data['data']['receiver']) > max_receivers:
+        msg = f"Too many receivers: {len(data['data']['receiver'])}, max: {max_receivers}"
+        logger.error(msg)
         await send_message(text=msg, chat_id=private_chat)
         await message.delete()
         return
 
-    response = json.loads(response.content)
+    # Iterate through list of receivers and send transaction for each
+    for i, receiver in enumerate(data['data']['receiver']):
 
-    # Handle error from VITE network
-    if response['error']:
-        if 'sendBlock.Height must be larger than 1' in response['msg']:
-            msg = f"🔴 Your wallet is empty."
-        else:
-            msg = f"🔴 {response['msg']}"
-        await send_message(text=msg, chat_id=private_chat)
-        await message.delete()
-        return
+        if i > 0:
+            # Respect anti-flood locking system
+            time.sleep(2.2)
 
-    # Handle success transaction
-    explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
-    receiver = tools.TipBotUser(response['data']['receiver']['id'])
-    sender = tools.TipBotUser(data['data']['sender']['id'])
-    amount = tools.float_to_str(data['data']['amount'])
+        copy = data['data']
+        copy['receiver'] = receiver
+        response = requests.post(url=full_url, data=json.dumps(copy))
 
-    public_msg = f"❤️ {sender.get_url()} tipped `{amount} " \
-                 f"EPIC` to {receiver.get_url()}"
-    private_msg = f"✅ `{amount} EPIC` to {receiver.get_url()}\n" \
-                  f"▫️ [Tip details]({explorer_url})"
-    receiver_msg = f"💸 `{amount} EPIC` from {sender.get_url()}"
+        # Handle error with connection to database
+        if response.status_code != 200:
+            msg = f"🔴 Tip send error"
+            logger.error(msg)
+            await send_message(text=msg, chat_id=private_chat)
+            await message.delete()
+            return
 
-    # Send tx confirmation to sender's private chat
-    if not receiver.is_bot:
-        await send_message(text=private_msg, chat_id=private_chat)
+        response = json.loads(response.content)
 
-    # Send notification to receiver's private chat
-    await send_message(text=receiver_msg, chat_id=receiver.id)
+        # Handle error from VITE network
+        if response['error']:
+            if 'sendBlock.Height must be larger than 1' in response['msg']:
+                msg = f"🔴 Your wallet is empty."
+            else:
+                msg = f"🔴 {response['msg']}"
+            logger.error(msg)
+            await send_message(text=msg, chat_id=private_chat)
+            await message.delete()
+            return
 
-    # Replace original /tip user message with tip confirmation in active channel
-    await send_message(text=public_msg, chat_id=active_chat)
+        # Handle success transaction
+        explorer_url = tools.vitescan_tx_url(response['data']['transaction']['data']['hash'])
+        receiver = tools.TipBotUser(response['data']['receiver']['id'])
+        sender = tools.TipBotUser(copy['sender']['id'])
+        amount = tools.float_to_str(copy['amount'])
+
+        public_msg = f"❤️ {sender.get_url()} tipped `{amount} " \
+                     f"EPIC` to {receiver.get_url()}"
+        private_msg = f"✅ `{amount} EPIC` to {receiver.get_url()}\n" \
+                      f"▫️ [Tip details]({explorer_url})"
+        receiver_msg = f"💸 `{amount} EPIC` from {sender.get_url()}"
+
+        # Send tx confirmation to sender's private chat
+        if not receiver.is_bot:
+            await send_message(text=private_msg, chat_id=private_chat)
+
+        # Send notification to receiver's private chat
+        await send_message(text=receiver_msg, chat_id=receiver.id)
+
+        # Replace original /tip user message with tip confirmation in active channel
+        await send_message(text=public_msg, chat_id=active_chat)
 
     await message.delete()
 
@@ -644,8 +684,11 @@ async def address(message: types.Message, custom_user=None):
               f"`{response['data']}`\n\n" \
               f"👤  *Your username:*\n" \
               f"`@{user['username']}`"
+        logger.info(f"{user['username']}: show deposit address")
+
     else:
         msg = f"🔴 {response['msg']}"
+        logger.error(f"{user['username']}: {msg}")
 
     await send_message(text=msg, chat_id=active_chat)
 
@@ -654,35 +697,38 @@ async def address(message: types.Message, custom_user=None):
 @dp.message_handler(commands=COMMANDS['balance'])
 async def balance(message: types.Message):
     private_chat = message.from_user.id
-    user_obj = tools.TipBotUser(id=message.from_user.id)
-    response = user_obj.wallet.epic_balance()
+    sender = tools.TipBotUser(id=message.from_user.id)
+    response = sender.wallet.epic_balance()
 
-    if not response['error']:
-        status = response['msg']
-
-        if 'Updating' in status:
-            msg = f"▫️ {response['data']}"
-            reply = await message.reply(msg, reply=False, parse_mode=ParseMode.MARKDOWN)
-
-            while 'Updating' in status:
-                time.sleep(0.7)
-                await reply.edit_text(f"◾️ {response['data']}")
-                time.sleep(0.7)
-                await reply.edit_text(f"▫️ {response['data']}")
-                response = user_obj.wallet.epic_balance()
-                status = response['msg']
-
-            await reply.delete()
-
-        balances = []
-
-        for symbol, value in response['data'].items():
-            balances.append(f"`{value} {symbol}`")
-
-        balances_str = '\n'.join(balances)
-        msg = f"🪙 *Wallet Balance:*\n {balances_str}"
-    else:
+    if response['error']:
         msg = f"🔴 {response['msg']}"
+        logger.error(f"{sender.username}: {msg}")
+        await send_message(text=msg, chat_id=private_chat)
+        return
+
+    status = response['msg']
+
+    if 'Updating' in status:
+        msg = f"▫️ {response['data']}"
+        reply = await message.reply(msg, reply=False, parse_mode=ParseMode.MARKDOWN)
+
+        while 'Updating' in status:
+            time.sleep(0.7)
+            await reply.edit_text(f"◾️ {response['data']}")
+            time.sleep(0.7)
+            await reply.edit_text(f"▫️ {response['data']}")
+            response = sender.wallet.epic_balance()
+            status = response['msg']
+
+        await reply.delete()
+
+    balances = []
+
+    for symbol, value in response['data'].items():
+        balances.append(f"`{value} {symbol}`")
+
+    balances_str = '\n'.join(balances)
+    msg = f"🪙 *Wallet Balance:*\n {balances_str}"
 
     await send_message(text=msg, chat_id=private_chat)
 
@@ -698,6 +744,7 @@ async def send(message: types.Message):
     data = tools.parse_send_command(message)
 
     if data['error']:
+        logger.error(f"{message.from_user.username}: {data}")
         return
 
     data = data['data']
@@ -705,6 +752,7 @@ async def send(message: types.Message):
 
     if response.status_code != 200:
         msg = f"🔴 Transaction send error"
+        logger.error(f"{message.from_user.username}: Transaction send error")
         await send_message(text=msg, chat_id=private_chat)
         return
 
@@ -712,6 +760,7 @@ async def send(message: types.Message):
 
     if response['error']:
         msg = f"🟡 {response['msg']}"
+        logger.error(f"{message.from_user.username}: {response['msg']}")
         await send_message(text=msg, chat_id=private_chat)
         return
 
@@ -739,6 +788,8 @@ async def send(message: types.Message):
     # Send notification to receiver's private chat
     if 'receiver' in response['data'].keys():
         await send_message(text=receiver_msg, chat_id=response['data']['receiver']['id'])
+
+    logger.info(f"{message.from_user.username}: send success")
 
 
 # /------ DONATION EPIC HANDLE ------\ #
@@ -797,24 +848,18 @@ async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
 
     # Clean temp storage except active_user
     data = await state.get_data()
-    print(data)
 
     if 'active_user' in data.keys():
         user = data['active_user']
         await state.reset_data()
         await state.update_data(active_user=user)
-        data = await state.get_data()
-        print(data)
     else:
-        data = await state.get_data()
         await state.reset_data()
-        print(data)
 
     # Reset state
     logger.info(f"Reset state")
     await state.reset_state(with_data=False)
     data = await state.get_data()
-    print(data)
     await query.answer()
 
 

@@ -28,7 +28,7 @@ class TelegramUser(AbstractUser):
     class Meta:
         unique_together = ('id', 'username')
 
-    def temp_lock(self, time_: int = 10):
+    def temp_lock(self, time_: int = 2):
         self.locked = True
         self.save()
 
