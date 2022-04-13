@@ -470,7 +470,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
         if 'receiver' in response['data'].keys() else data['address']
 
     private_msg = f"✅ Transaction sent successfully\n" \
-                  f"▪️ [Transaction details (vitescan.io)]({explorer_url})"
+                  f"▪️️ [Transaction details (vitescan.io)]({explorer_url})"
     receiver_msg = f"💸 `{amount} EPIC from` {sender.get_url()}"
 
     # Send tx confirmation to sender's private chat
@@ -560,8 +560,8 @@ async def tip(message: types.Message):
 
         public_msg = f"❤️ {sender.get_url()} tipped `{amount} " \
                      f"EPIC` to {receiver.get_url()}"
-        private_msg = f"✅ `{amount} EPIC` to {receiver.get_url()}\n" \
-                      f"▫️ [Tip details]({explorer_url})"
+        private_msg = f"✅ `{amount} EPIC` to {receiver.get_url()} \n" \
+                      f"▪️️ [Tip details]({explorer_url})"
         receiver_msg = f"💸 `{amount} EPIC` from {sender.get_url()}"
 
         # Send tx confirmation to sender's private chat
@@ -574,7 +574,7 @@ async def tip(message: types.Message):
         # Replace original /tip user message with tip confirmation in active channel
         await send_message(text=public_msg, chat_id=active_chat)
 
-        logger.info(f"{sender.username}: sent {amount} to {receiver}")
+        logger.info(f"{sender.username}: sent {amount} to {receiver.username}")
 
     await message.delete()
 
