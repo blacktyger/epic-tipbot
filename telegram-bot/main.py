@@ -497,6 +497,7 @@ async def tip(message: types.Message):
     if response.status_code != 200:
         msg = f"🔴 Tip send error"
         await send_message(text=msg, chat_id=private_chat)
+        await message.delete()
         return
 
     response = json.loads(response.content)
@@ -508,6 +509,7 @@ async def tip(message: types.Message):
         else:
             msg = f"🔴 {response['msg']}"
         await send_message(text=msg, chat_id=private_chat)
+        await message.delete()
         return
 
     # Handle success transaction
