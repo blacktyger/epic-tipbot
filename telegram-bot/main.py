@@ -670,6 +670,8 @@ async def inline_blank(inline_query: InlineQuery):
             input_message_content=InputTextMessageContent(command, parse_mode=ParseMode.MARKDOWN)
             ))
 
+    print(items)
+
     await bot.answer_inline_query(
         inline_query.id,
         results=items,
