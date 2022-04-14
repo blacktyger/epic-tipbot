@@ -631,6 +631,7 @@ async def inline_blank(inline_query: InlineQuery):
 
         # Try to search for possible variations, exclude potential amounts
         else:
+            match = ''
             for match in inline_query.query.split(' '):
                 try:
                     # if successful conversion ignore and continue
@@ -639,9 +640,9 @@ async def inline_blank(inline_query: InlineQuery):
                 except Exception:
                     # If conversion to float fails try to use is as part of username
                     print(match)
-                    users = tools.TipBotUser.query_users(num=10, match=match)
                     break
 
+            users = tools.TipBotUser.query_users(num=10, match=match)
     else:
         # Get list of 10 random users to show as result list
         users = tools.TipBotUser.get_users(num=10, random_=True)
