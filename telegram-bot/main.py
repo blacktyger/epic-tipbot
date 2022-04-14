@@ -517,7 +517,7 @@ async def tip(message: types.Message):
         msg = f"Too many receivers: {len(data['data']['receiver'])}, max: {max_receivers}"
         logger.error(msg)
         await send_message(text=msg, chat_id=private_chat)
-        await message.delete()
+        await tools.delete_message(message)
         return
 
     # Iterate through list of receivers and send transaction for each
@@ -536,7 +536,7 @@ async def tip(message: types.Message):
             msg = f"🔴 Tip send error"
             logger.error(msg)
             await send_message(text=msg, chat_id=private_chat)
-            await message.delete()
+            await tools.delete_message(message)
             return
 
         response = json.loads(response.content)
@@ -549,7 +549,7 @@ async def tip(message: types.Message):
                 msg = f"🔴 {response['msg']}"
             logger.error(msg)
             await send_message(text=msg, chat_id=private_chat)
-            await message.delete()
+            await tools.delete_message(message)
             return
 
         # Handle success transaction
@@ -576,7 +576,7 @@ async def tip(message: types.Message):
 
         logger.info(f"{sender.username}: sent {amount} to {receiver.username}")
 
-    await message.delete()
+    await tools.delete_message(message)
 
 
 # //-- BALANCE INLINE -- \\ #
@@ -722,7 +722,7 @@ async def balance(message: types.Message):
             response = sender.wallet.epic_balance()
             status = response['msg']
 
-        await reply.delete()
+        await tools.delete_message(reply)
 
     balances = []
 

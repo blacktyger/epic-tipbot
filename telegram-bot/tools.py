@@ -1,5 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.exceptions import MessageToDeleteNotFound
+from aiogram.utils.exceptions import MessageToDeleteNotFound, MessageCantBeDeleted
 from aiogram.contrib.fsm_storage.files import PickleStorage
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
@@ -316,6 +316,19 @@ def build_wallet_keyboard(user: dict, callback: CallbackData) -> InlineKeyboardM
     return keyboard_inline
 
 
+async def delete_message(message: types.Message):
+    """
+    Wrapper function with try, except block
+    around removing TelegramMessages
+    """
+
+    try:
+        await message.delete()
+    except (MessageToDeleteNotFound, MessageCantBeDeleted) as e:
+        logger.error(f"{message.from_user.username}: {e}")
+        pass
+
+
 async def remove_state_messages(state: FSMContext):
     """Remove bot messages saved in temp storage"""
     state_ = await state.get_state()
@@ -325,14 +338,14 @@ async def remove_state_messages(state: FSMContext):
 
         # Remove messages
         if f'msg_{state_.split(":")[-1]}' in data.keys():
+            msg = data[f'msg_{state_.split(":")[-1]}']
             try:
-                logger.info('DELETE MSG: ', data[f'msg_{state_.split(":")[-1]}']['id'])
+                logger.info(f"DELETE MSG: {msg['id']}")
             except Exception:
                 pass
-            try:
-                await data[f'msg_{state_.split(":")[-1]}'].delete()
-            except MessageToDeleteNotFound:
-                pass
+
+            await delete_message(msg)
+
 
 
 def cancel_keyboard():
