@@ -102,8 +102,6 @@ class TipBotWallet:
 
         response = json.loads(response.content)
 
-        print(response)
-
         if isinstance(response['data'], dict):
             if response['data'] and 'EPIC' in response['data'].keys():
                 epic_balance = float_to_str(response['data']['EPIC'])

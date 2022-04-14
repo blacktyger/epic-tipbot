@@ -626,7 +626,6 @@ async def inline_blank(inline_query: InlineQuery):
         # Parse username based on '@' if present
         if '@' in inline_query.query:
             match = inline_query.query.split('@')[-1].split(' ')[0]
-            print(match)
             users = tools.TipBotUser.query_users(num=10, match=match)
 
         # Try to search for possible variations, exclude potential amounts
@@ -639,7 +638,6 @@ async def inline_blank(inline_query: InlineQuery):
                     continue
                 except Exception:
                     # If conversion to float fails try to use is as part of username
-                    print(match)
                     break
 
             users = tools.TipBotUser.query_users(num=10, match=match)
@@ -669,8 +667,6 @@ async def inline_blank(inline_query: InlineQuery):
             title=title,
             input_message_content=InputTextMessageContent(command, parse_mode=ParseMode.HTML)
             ))
-
-    print(items)
 
     await bot.answer_inline_query(
         inline_query.id,
