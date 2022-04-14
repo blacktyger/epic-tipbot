@@ -1,5 +1,7 @@
+import random
+
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InlineQuery, \
-    InlineQueryResultArticle, InputTextMessageContent
+    InlineQueryResultArticle, InputTextMessageContent, InlineQueryResult, InlineQueryResultGame
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
@@ -10,6 +12,8 @@ import requests
 import hashlib
 import json
 import time
+
+from aiogram.utils.exceptions import BadRequest
 
 from settings import Database, Tipbot, MarketData
 import long_strings as strings
@@ -99,9 +103,16 @@ async def wallet(message: types.Message, state: FSMContext):
     # Save user dict to temp storage
     await state.update_data(active_user=user)
 
+    try:
+        owner = tools.TipBotUser(id=user['id'])
+    except Exception:
+        text = strings.invalid_wallet()
+        await wallet_gui.edit_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+        logger.error(f"{user['username']}: No TipBot Wallet account")
+        return
+
     # Create user object and send request to database
-    user_obj = tools.TipBotUser(id=user['id'])
-    response = user_obj.wallet.epic_balance()
+    response = owner.wallet.epic_balance()
 
     # Handle response error
     if response['error']:
@@ -112,16 +123,17 @@ async def wallet(message: types.Message, state: FSMContext):
 
         # Update loading wallet GUI to error wallet
         await wallet_gui.edit_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
-        logger.error(f"{user['username']}: {text}")
+        logger.error(f"{owner.username}: {response['msg']}")
         return
 
     # Handle case when wallet needs to update new transactions
     status = response['msg']
+
     while 'Updating' in status:
         await wallet_gui.edit_text(text=strings.loading_wallet_2(),
                                    reply_markup=keyboard,
                                    parse_mode=ParseMode.MARKDOWN)
-        response = user_obj.wallet.epic_balance()
+        response = owner.wallet.epic_balance()
         status = response['msg']
         time.sleep(0.3)
         await wallet_gui.edit_text(text=strings.loading_wallet_1(),
@@ -138,7 +150,7 @@ async def wallet(message: types.Message, state: FSMContext):
                                reply_markup=keyboard,
                                parse_mode=ParseMode.MARKDOWN)
 
-    logger.info(f"{user['username']}: wallet GUI loaded")
+    logger.info(f"{owner.username}: wallet GUI loaded")
 
 
 # /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
@@ -490,7 +502,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
 # /------ TIP EPIC HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['tip'])
 @dp.message_handler(lambda message: message.text.startswith(('tip', 'Tip'))
-                    and 2 < len(message.text.split(' ')) < 10)
+                                    and 2 < len(message.text.split(' ')) < 10)
 async def tip(message: types.Message):
     query = 'send_transaction'
     full_url = f'{TIPBOT_API_URL}/{query}/'
@@ -534,7 +546,7 @@ async def tip(message: types.Message):
         # Handle error with connection to database
         if response.status_code != 200:
             msg = f"🔴 Tip send error"
-            logger.error(msg)
+            logger.error(f"{data['sender']['username']}: tip send error: {response.status_code}")
             await send_message(text=msg, chat_id=private_chat)
             await tools.delete_message(message)
             return
@@ -547,7 +559,7 @@ async def tip(message: types.Message):
                 msg = f"🔴 Your wallet is empty."
             else:
                 msg = f"🔴 {response['msg']}"
-            logger.error(msg)
+            logger.error(f"{copy['sender']['username']}: {response['msg']}")
             await send_message(text=msg, chat_id=private_chat)
             await tools.delete_message(message)
             return
@@ -569,7 +581,8 @@ async def tip(message: types.Message):
             await send_message(text=private_msg, chat_id=private_chat)
 
         # Send notification to receiver's private chat
-        await send_message(text=receiver_msg, chat_id=receiver.id)
+        if not receiver.is_bot:
+            await send_message(text=receiver_msg, chat_id=receiver.id)
 
         # Replace original /tip user message with tip confirmation in active channel
         await send_message(text=public_msg, chat_id=active_chat)
@@ -579,11 +592,68 @@ async def tip(message: types.Message):
     await tools.delete_message(message)
 
 
+# //-- BLANK INLINE -- \\ #
+@dp.inline_handler(lambda inline_query: inline_query.query == '' or inline_query.query)
+async def inline_blank(inline_query: InlineQuery):
+    user = inline_query['from'].__dict__['_values']
+
+    # Check if user have already active account
+    try:
+        sender = tools.TipBotUser(id=user['id'])
+    except Exception:
+        await bot.answer_inline_query(inline_query.id, results=[],
+                                      cache_time=1, is_personal=True,
+                                      switch_pm_text='Create Tip-Bot Account Here',
+                                      switch_pm_parameter='help')
+        return
+
+    response = sender.wallet.epic_balance()
+
+    # Check if balance is positive
+    if float(response['data']['string'][0]) < 0.00000001:
+        switch_pm_text = "Deposit To Tip-Bot Wallet Here"
+        switch_pm_parameter = 'deposit'
+
+    else:
+        switch_pm_text = "Manage Tip-Bot Wallet Here"
+        switch_pm_parameter = 'wallet'
+
+    items = []
+
+    # Parse usernames or its parts to query and show result list
+    if '@' in inline_query.query:
+        match = inline_query.query.split('@')[-1].split(' ')[0]
+        print(match)
+        users = tools.TipBotUser.query_users(num=10, match=match)
+    else:
+        # Get list of 10 random users to show as result list
+        users = tools.TipBotUser.get_users(num=10, random_=True)
+
+    # Iterate users list and create result objects to display
+    for user in users:
+        id = f"{user['id'] * random.randint(1, 1000)}"
+        title = f"➡️️ Send tip to @{user['username']} 0.1 EPIC"
+        command = f"tip @{user['username']} 0.1"
+
+        items.append(InlineQueryResultArticle(
+            id=id,
+            title=title,
+            input_message_content=InputTextMessageContent(command, parse_mode=ParseMode.MARKDOWN)
+            ))
+
+    await bot.answer_inline_query(
+        inline_query.id,
+        results=items,
+        cache_time=1, is_personal=True,
+        switch_pm_text=switch_pm_text,
+        switch_pm_parameter=switch_pm_parameter
+        )
+
+
 # //-- BALANCE INLINE -- \\ #
 @dp.inline_handler(lambda inline_query: 'wallet' in inline_query.query)
 async def inline_balance(inline_query: InlineQuery):
     user = inline_query['from'].__dict__['_values']
-    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
     thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
     title = "EPIC Tip-Bot Wallet"
     sender = tools.TipBotUser(id=user['id'])
@@ -600,38 +670,18 @@ async def inline_balance(inline_query: InlineQuery):
 
         lines = [f"Balance: {epic_balance} EPIC"]
 
-    item = InlineQueryResultArticle(
-        id=result_id,
-        title=title,
-        description='\n'.join(lines),
-        thumb_url=thumb_url,
-        input_message_content=InputTextMessageContent(f'Manage your wallet: @{bot_name.username}',
-                                                      parse_mode=ParseMode.HTML)
-        )
-    await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
-
-
-# // -- TIP INLINE -- \\ #
-@dp.inline_handler(lambda inline_query: 'tip' in inline_query.query)
-async def inline_tip(inline_query: InlineQuery):
-    """
-    User can type in any chat window `tip @username amount` and click
-    InlineQueryResult to send as ready /tip command
-    """
-    result_id: str = hashlib.md5(inline_query.query.encode()).hexdigest()
-    thumb_url = "https://i.ibb.co/ypTVqvY/photo-2022-03-31-21-04-19.jpg"
-    title = "Send Epic-Cash TIP"
-    lines = [f"type @username and amount",
-             "and click here"]
-
-    item = InlineQueryResultArticle(
-        id=result_id,
-        title=title,
-        description='\n'.join(lines),
-        thumb_url=thumb_url,
-        input_message_content=InputTextMessageContent(inline_query.query, parse_mode=ParseMode.HTML)
-        )
-    await bot.answer_inline_query(inline_query.id, results=[item], cache_time=1)
+    id = 123
+    items = []
+    for i, item in enumerate(range(1, 4)):
+        items.append(InlineQueryResultArticle(
+            id=f"{id + i}",
+            title=title,
+            description='\n'.join(lines),
+            thumb_url=thumb_url,
+            input_message_content=InputTextMessageContent(f'Manage your wallet: @{bot_name.username}',
+                                                          parse_mode=ParseMode.HTML)
+            ))
+    await bot.answer_inline_query(inline_query.id, results=items, cache_time=1, is_personal=True)
 
 
 # /------ START/HELP HANDLE ------\ #

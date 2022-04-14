@@ -1,3 +1,5 @@
+import random
+
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.exceptions import MessageToDeleteNotFound, MessageCantBeDeleted
 from aiogram.contrib.fsm_storage.files import PickleStorage
@@ -10,6 +12,8 @@ from typing import Union
 import decimal
 import json
 import os
+
+from requests import Response
 
 from logger_ import logger
 from settings import Database, MarketData
@@ -98,17 +102,22 @@ class TipBotWallet:
 
         response = json.loads(response.content)
 
-        if 'EPIC' in response['data'].keys():
-            epic_balance = float_to_str(response['data']['EPIC'])
+        print(response)
+
+        if isinstance(response['data'], dict):
+            if response['data'] and 'EPIC' in response['data'].keys():
+                epic_balance = float_to_str(response['data']['EPIC'])
+            else:
+                epic_balance = 0.0
+
+            # Get Epic-Cash price in USD from Coingecko API
+            epic_vs_usd = PRICE.price_epic_vs('USD')
+            balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+            response['data']['string'] = epic_balance, balance_in_usd
+
+            return response
         else:
-            epic_balance = 0.0
-
-        # Get Epic-Cash price in USD from Coingecko API
-        epic_vs_usd = PRICE.price_epic_vs('USD')
-        balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
-        response['data']['string'] = epic_balance, balance_in_usd
-
-        return response
+            return {'error': 0, 'msg': response['msg'], 'data': None}
 
     def __repr__(self):
         return f"TipBotWallet({self.address})"
@@ -137,26 +146,53 @@ class TipBotUser:
             logger.error(f'No username and id, provide at least one.')
             return
 
-        # Prepare database query
-        query = 'users'
         params = {'user_id': self.id, 'username': self.username}
-        full_url = f'{DJANGO_API_URL}/{query}/'
-        response = requests.get(url=full_url, params=params)
+        response = self._query('users', DJANGO_API_URL, params)
 
         if response.status_code != 200:
             logger.error(f'TelegramUser Database error: {response.status_code}')
             return
 
-        response = json.loads(response.content)[0]
+        response = json.loads(response.content)
 
-        for key, value in response.items():
+        if not response:
+            logger.error(f'TelegramUser [{self.id}]{self.username} is not registered')
+            raise Exception(f'TelegramUser is not registered')
+
+        for key, value in response[0].items():
             if key == 'wallet':
                 setattr(self, key, TipBotWallet(address=value[0]))
             else:
                 setattr(self, key, value)
 
+    @staticmethod
+    def _query(query: str, url: str, params: dict) -> Response:
+        # Prepare database query
+        full_url = f'{url}/{query}/'
+        return requests.get(url=full_url, params=params)
+
     def get_url(self):
-        return f"[{self.username}](tg://user?id={self.id})"
+        # Prepare name and link to profile shown is messages
+        name = self.first_name if self.first_name else self.username.capitalize()
+        return f"[{name}](tg://user?id={self.id})"
+
+    @classmethod
+    def query_users(cls, num: int, match: str):
+        params = {'part_username': match}
+        response = cls._query('users', DJANGO_API_URL, params)
+        users = response.json()
+        return users[:num]
+
+    @classmethod
+    def get_users(cls, num: int, random_: bool = False):
+        params = {}
+        response = cls._query('users', DJANGO_API_URL, params)
+        users = response.json()
+
+        if random_:
+            random.shuffle(users)
+
+        return users[:num]
 
 def get_receivers(message: types.Message) -> list:
     """

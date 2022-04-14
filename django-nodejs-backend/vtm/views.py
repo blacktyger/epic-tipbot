@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.views.generic import CreateView
 from django.http import JsonResponse
 from rest_framework import viewsets
@@ -12,6 +13,7 @@ class TelegramUserView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = TelegramUser.objects.all()
+        part_username = self.request.query_params.get('part_username')
         username = self.request.query_params.get('username')
         user_id = self.request.query_params.get('user_id')
 
@@ -20,6 +22,10 @@ class TelegramUserView(viewsets.ModelViewSet):
 
         if username:
             queryset = queryset.filter(username=username)
+
+        if part_username:
+            queryset = queryset.filter(Q(username__contains=part_username) |
+                                       Q(first_name__contains=part_username))
 
         return queryset
 
