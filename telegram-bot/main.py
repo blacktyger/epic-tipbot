@@ -615,25 +615,53 @@ async def inline_blank(inline_query: InlineQuery):
         switch_pm_parameter = 'deposit'
 
     else:
-        switch_pm_text = "Manage Tip-Bot Wallet Here"
-        switch_pm_parameter = 'wallet'
+        switch_pm_text = f"Tip-Bot Wallet Balance: {response['data']['string'][0]} EPIC"
+        switch_pm_parameter = 'start_wallet'
 
     items = []
 
     # Parse usernames or its parts to query and show result list
-    if '@' in inline_query.query:
-        match = inline_query.query.split('@')[-1].split(' ')[0]
-        print(match)
-        users = tools.TipBotUser.query_users(num=10, match=match)
+    if len(inline_query.query.split(' ')) > 0:
+
+        # Parse username based on '@' if present
+        if '@' in inline_query.query:
+            match = inline_query.query.split('@')[-1].split(' ')[0]
+            print(match)
+            users = tools.TipBotUser.query_users(num=10, match=match)
+
+        # Try to search for possible variations, exclude potential amounts
+        else:
+            for match in inline_query.query.split(' '):
+                try:
+                    # if successful conversion ignore and continue
+                    float(match)
+                    continue
+                except Exception:
+                    # If conversion to float fails try to use is as part of username
+                    print(match)
+                    users = tools.TipBotUser.query_users(num=10, match=match)
+                    break
+
     else:
         # Get list of 10 random users to show as result list
         users = tools.TipBotUser.get_users(num=10, random_=True)
 
+    # Parse amount or set standard value for quick tips
+    amount = 0
+    for match in inline_query.query.split(' '):
+        try:
+            amount = float(match)
+            break
+        except Exception:
+            continue
+
+    amount = amount if amount else 0.01
+
     # Iterate users list and create result objects to display
     for user in users:
         id = f"{user['id'] * random.randint(1, 1000)}"
-        title = f"➡️️ Send tip to @{user['username']} 0.1 EPIC"
-        command = f"tip @{user['username']} 0.1"
+        title = f"➡️️ Quick Send {amount} EPIC to @{user['username']}"
+        command = f"tip @{user['username']} {amount}"
 
         items.append(InlineQueryResultArticle(
             id=id,
