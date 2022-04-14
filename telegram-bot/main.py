@@ -667,7 +667,7 @@ async def inline_blank(inline_query: InlineQuery):
         items.append(InlineQueryResultArticle(
             id=id,
             title=title,
-            input_message_content=InputTextMessageContent(command, parse_mode=ParseMode.MARKDOWN)
+            input_message_content=InputTextMessageContent(command, parse_mode=ParseMode.HTML)
             ))
 
     print(items)
