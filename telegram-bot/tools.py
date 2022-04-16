@@ -154,7 +154,9 @@ class TipBotUser:
         response = json.loads(response.content)
 
         if not response:
-            logger.error(f'TelegramUser [{self.id}]{self.username} is not registered')
+            logger.warning(f'TelegramUser [{self.id}]'
+                           f'{self.username if self.username else self.first_name} '
+                           f'is not registered')
             raise Exception(f'TelegramUser is not registered')
 
         for key, value in response[0].items():
@@ -326,28 +328,36 @@ def vitescan_tx_url(tx_hash):
     return f"https://vitescan.io/tx/{tx_hash}"
 
 
-def build_wallet_keyboard(user: dict, callback: CallbackData) -> InlineKeyboardMarkup:
+class WalletGUI:
     """
-    Prepare Wallet GUI InlineKeyboard
-    :param callback: CallbackData instance (aiogram)
-    :param user: TelegramUser dict
-    :return: InlineKeyboardMarkup instance (aiogram)
+    Manage different keyboards and GUI messages ('screens')
     """
+    def __init__(self, user: dict, callback: CallbackData):
+        self.user = user
+        self.callback = callback
 
-    buttons = ['deposit', 'withdraw', 'send', 'donate', 'support']
-    icons = ['↘ ', '↗️ ', '➡️ ', '❤️ ', '💬️ ']
+    def home_keyboard(self) -> InlineKeyboardMarkup:
+        """
+        Prepare Wallet GUI InlineKeyboard
+        :param callback: CallbackData instance (aiogram)
+        :param user: TelegramUser dict
+        :return: InlineKeyboardMarkup instance (aiogram)
+        """
 
-    buttons = [InlineKeyboardButton(
-        text=f"{icons[i]}{btn.capitalize()}",
-        callback_data=callback.new(action=btn, user=user['id'], username=user['username']))
-        for i, btn in enumerate(buttons)]
+        buttons = ['deposit', 'withdraw', 'send', 'donate', 'support']
+        icons = ['↘ ', '↗️ ', '➡️ ', '❤️ ', '💬️ ']
 
-    keyboard_inline = InlineKeyboardMarkup() \
-        .row(buttons[0], buttons[1]) \
-        .row(buttons[2], buttons[3]) \
-        .add(buttons[4])
+        buttons = [InlineKeyboardButton(
+            text=f"{icons[i]}{btn.capitalize()}",
+            callback_data=self.callback.new(action=btn, user=self.user['id'], username=self.user['username']))
+            for i, btn in enumerate(buttons)]
 
-    return keyboard_inline
+        keyboard_inline = InlineKeyboardMarkup() \
+            .row(buttons[0], buttons[1]) \
+            .row(buttons[2], buttons[3]) \
+            .add(buttons[4])
+
+        return keyboard_inline
 
 
 async def delete_message(message: types.Message):

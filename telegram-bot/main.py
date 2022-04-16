@@ -76,10 +76,10 @@ async def create(message: types.Message):
     else:
         if 'account already active' in response['msg']:
             msg = f"🟢 Your account is already active :)"
+            logger.info(f"{user['username']}: {msg}")
         else:
             msg = f"🟡 {response['msg']}"
-
-        logger.error(f"{user['username']}: {msg}")
+            logger.warning(f"{user['username']}: {msg}")
 
     await send_message(text=msg, chat_id=private_chat)
 
@@ -93,8 +93,9 @@ async def wallet(message: types.Message, state: FSMContext):
     # Reset old state and data
     await state.reset_state(with_data=True)
 
-    # Prepare main wallet inline keyboard
-    keyboard = tools.build_wallet_keyboard(user, wallet_cb)
+    # Prepare main wallet GUI (message and inline keyboard)
+    gui = tools.WalletGUI(user=user, callback=wallet_cb)
+    keyboard = gui.home_keyboard()
 
     # Display loading wallet GUI
     wallet_gui = await send_message(
@@ -593,7 +594,8 @@ async def tip(message: types.Message):
 
 
 # //-- BLANK INLINE -- \\ #
-@dp.inline_handler(lambda inline_query: inline_query.query == '' or inline_query.query)
+@dp.inline_handler(lambda inline_query: (inline_query.query == '' or
+                   inline_query.query) and len(inline_query.query.split(' ')) < 8)
 async def inline_blank(inline_query: InlineQuery):
     user = inline_query['from'].__dict__['_values']
 
@@ -615,7 +617,7 @@ async def inline_blank(inline_query: InlineQuery):
         switch_pm_parameter = 'deposit'
 
     else:
-        switch_pm_text = f"Tip-Bot Wallet Balance: {response['data']['string'][0]} EPIC"
+        switch_pm_text = f"Tip-Bot Balance: {response['data']['string'][0]} EPIC"
         switch_pm_parameter = 'start_wallet'
 
     items = []
@@ -642,8 +644,8 @@ async def inline_blank(inline_query: InlineQuery):
 
             users = tools.TipBotUser.query_users(num=10, match=match)
     else:
-        # Get list of 10 random users to show as result list
-        users = tools.TipBotUser.get_users(num=10, random_=True)
+        # Get list of x random users to show as result list
+        users = tools.TipBotUser.get_users(num=5, random_=True)
 
     # Parse amount or set standard value for quick tips
     amount = 0
