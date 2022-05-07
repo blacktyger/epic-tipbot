@@ -26,9 +26,9 @@ class Wallet(models.Model):
 
 
 class Transaction(models.Model):
-    token = models.ForeignKey(Token, blank=True, null=True, on_delete=models.DO_NOTHING, related_name='token')
-    sender = models.ForeignKey(Wallet, on_delete=models.DO_NOTHING, related_name='sender_wallet')
-    receiver = models.ForeignKey(Wallet, blank=True, null=True, on_delete=models.DO_NOTHING, related_name='receiver_wallet')
+    token = models.ForeignKey(Token, blank=True, null=True, on_delete=models.SET_NULL, related_name='token')
+    sender = models.ForeignKey(Wallet, null=True, on_delete=models.SET_NULL, related_name='sender_wallet')
+    receiver = models.ForeignKey(Wallet, blank=True, null=True, on_delete=models.SET_NULL, related_name='receiver_wallet')
 
     address = models.CharField(max_length=58, null=True, blank=True)
     amount = models.DecimalField(decimal_places=8, max_digits=32, null=True)
@@ -43,8 +43,11 @@ class Transaction(models.Model):
         ordering = ('-timestamp', )
 
     def __str__(self):
-        return f"Transaction({self.sender.user.username} -> {self.amount} -> " \
-               f"{self.receiver.user.username if self.receiver else self.address})"
+        if self.sender:
+            return f"Transaction({self.sender.user.username} -> {self.amount} -> " \
+                   f"{self.receiver.user.username if self.receiver else self.address})"
+        else:
+            return f"Transaction({self.token} {self.amount}, {self.status})"
 
     def prepare_amount(self):
         dec = 10 ** self.token.decimals if self.token else 8

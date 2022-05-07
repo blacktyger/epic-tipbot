@@ -64,7 +64,14 @@ def get_or_create_telegram_user(request) -> tuple:
         request.session['acc_pass'] = payload['password']
         user = TelegramUser.objects.create_user(**payload)
     else:
-        user = TelegramUser.objects.get(**payload)
+        user = exists.filter(username=payload['username'])
+
+        if not user:
+            user = exists[0]
+            print(f'Found {exists[0]} but username is different '
+                  f'({exists[0].username} vs {payload["username"]})')
+        else:
+            user = user[0]
 
     return user, exists
 

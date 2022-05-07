@@ -1,7 +1,5 @@
-import random
-
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InlineQuery, \
-    InlineQueryResultArticle, InputTextMessageContent, InlineQueryResult, InlineQueryResultGame
+    InlineQueryResultArticle, InputTextMessageContent
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
@@ -9,11 +7,9 @@ from aiogram.types import ParseMode
 from aiogram import *
 
 import requests
-import hashlib
+import random
 import json
 import time
-
-from aiogram.utils.exceptions import BadRequest
 
 from settings import Database, Tipbot, MarketData
 import long_strings as strings
@@ -59,61 +55,48 @@ class DonateStates(StatesGroup):
 # /------ CREATE ACCOUNT HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['create'])
 async def create(message: types.Message):
-    query = 'users/create'
-    full_url = f'{DJANGO_API_URL}/{query}/'
-    private_chat = message.from_user.id
-    user, message_ = tools.parse_user_and_message(message)
+    # Create TipBotUser instance
+    owner = tools.TipBotUser.from_obj(message.from_user)
+    response = owner.register()
 
-    response = requests.post(url=full_url, data=json.dumps(user))
-    response = json.loads(response.content)
+    # Handle error case
+    if response['error']:
+        logger.warning(f"{response['msg']}")
 
-    if not response['error']:
+        if 'account already active' in response['msg']:
+            msg = f"🟢 Your account is already active :)"
+        else:
+            msg = f"🟡 {response['msg']}"
+
+    # Handle success creation
+    else:
         msg = f"✅ Account created successfully!\n\n" \
               f"▪️️ [WALLET SEEDPHRASE AND PASSWORD]({response['data']})\n\n" \
               f"▪️️ Please backup message from link ️\n" \
               f"▪️️ Open your wallet 👉 /wallet"
 
-    else:
-        if 'account already active' in response['msg']:
-            msg = f"🟢 Your account is already active :)"
-            logger.info(f"{user['username']}: {msg}")
-        else:
-            msg = f"🟡 {response['msg']}"
-            logger.warning(f"{user['username']}: {msg}")
-
-    await send_message(text=msg, chat_id=private_chat)
+    await send_message(text=msg, chat_id=owner.id)
 
 
 # /------ WALLET GUI HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['wallet'], state='*')
 async def wallet(message: types.Message, state: FSMContext):
-    private_chat = message.from_user.id
-    user, _ = tools.parse_user_and_message(message)
+    owner = tools.TipBotUser.from_obj(message.from_user)
 
     # Reset old state and data
     await state.reset_state(with_data=True)
 
     # Prepare main wallet GUI (message and inline keyboard)
-    gui = tools.WalletGUI(user=user, callback=wallet_cb)
+    gui = tools.WalletGUI(user=owner, callback=wallet_cb)
     keyboard = gui.home_keyboard()
 
     # Display loading wallet GUI
     wallet_gui = await send_message(
-        text=strings.loading_wallet_1(), chat_id=private_chat, reply_markup=keyboard)
+        text=strings.loading_wallet_1(), chat_id=owner.id, reply_markup=keyboard)
 
-    # Save user dict to temp storage
-    await state.update_data(active_user=user)
-
-    try:
-        owner = tools.TipBotUser(id=user['id'])
-    except Exception:
-        text = strings.invalid_wallet()
-        await wallet_gui.edit_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
-        logger.error(f"{user['username']}: No TipBot Wallet account")
-        return
-
-    # Create user object and send request to database
     response = owner.wallet.epic_balance()
+
+    print(owner.wallet.cached_balance)
 
     # Handle response error
     if response['error']:
@@ -628,7 +611,7 @@ async def inline_blank(inline_query: InlineQuery):
         # Parse username based on '@' if present
         if '@' in inline_query.query:
             match = inline_query.query.split('@')[-1].split(' ')[0]
-            users = tools.TipBotUser.query_users(num=10, match=match)
+            users = sender.query_users(num=10, match=match)
 
         # Try to search for possible variations, exclude potential amounts
         else:
@@ -642,10 +625,10 @@ async def inline_blank(inline_query: InlineQuery):
                     # If conversion to float fails try to use is as part of username
                     break
 
-            users = tools.TipBotUser.query_users(num=10, match=match)
+            users = sender.query_users(num=10, match=match)
     else:
         # Get list of x random users to show as result list
-        users = tools.TipBotUser.get_users(num=5, random_=True)
+        users = sender.get_users(num=5, random_=True)
 
     # Parse amount or set standard value for quick tips
     amount = 0
@@ -915,32 +898,29 @@ async def donation(message: types.Message):
 
 async def send_message(**kwargs):
     """Helper function for sending messages from bot to TelegramUser"""
-    message = await bot.send_message(
-        **kwargs, parse_mode=ParseMode.MARKDOWN,
-        disable_web_page_preview=True
-        )
-    return message
+    try:
+        message = await bot.send_message(
+            **kwargs, parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True
+            )
+        return message
+    except Exception as e:
+        print(e)
+        user = tools.TipBotUser(id=kwargs['chat_id'])
+        name = user.username if user.username else user.id
+        logger.error(f'SEND MSG ERROR: From {name}: "{kwargs["text"]}"')
 
 
 @dp.callback_query_handler(text='cancel_any', state='*')
 async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
+    sender = tools.TipBotUser(id=query.from_user.id)
+
     # Remove messages
     await tools.remove_state_messages(state)
 
-    # Clean temp storage except active_user
-    data = await state.get_data()
-
-    if 'active_user' in data.keys():
-        user = data['active_user']
-        await state.reset_data()
-        await state.update_data(active_user=user)
-    else:
-        await state.reset_data()
-
     # Reset state
-    logger.info(f"Reset state")
-    await state.reset_state(with_data=False)
-    data = await state.get_data()
+    logger.info(f"{sender.username}: Reset state and data")
+    await state.reset_state(with_data=True)
     await query.answer()
 
 

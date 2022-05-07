@@ -199,8 +199,11 @@ def get_balance(request):
     """
     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
 
-    user = json.loads(request.body)
-    wallet = Wallet.objects.filter(user__id=user['id']).first()
+    payload = json.loads(request.body)
+    print(payload)
+    wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
+                                   Q(address=payload['address'])).first()
+    print(wallet)
 
     if wallet:
         params = {'mnemonics': wallet.decrypt_mnemonics()}

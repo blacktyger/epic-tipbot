@@ -1,6 +1,4 @@
-import random
-
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, User
 from aiogram.utils.exceptions import MessageToDeleteNotFound, MessageCantBeDeleted
 from aiogram.contrib.fsm_storage.files import PickleStorage
 from aiogram.utils.callback_data import CallbackData
@@ -8,12 +6,11 @@ from aiogram.dispatcher import FSMContext
 from aiogram import types
 import requests
 
-from typing import Union
 import decimal
+import random
+import typing
 import json
 import os
-
-from requests import Response
 
 from logger_ import logger
 from settings import Database, MarketData
@@ -35,7 +32,7 @@ def float_to_str(f):
     return format(d1, 'f')
 
 
-def get_amount(message: types.Message) -> Union[float, None]:
+def get_amount(message: types.Message) -> typing.Union[float, None]:
     """
     Parse amount from user's messages
     :param message: types.Message (AIOGRAM)
@@ -61,32 +58,34 @@ class TipBotWallet:
                  ):
         self.address = address
         self.balance = balance
-        self.user = int
+        self.cached_balance = dict
+        self._update_from_db()
 
+    def _update_from_db(self):
         if not self.address:
             logger.error(f'No address provided.')
-            return
+            pass
+        else:
+            # Prepare database query
+            query = 'wallets'
+            params = {'address': self.address}
+            full_url = f'{DJANGO_API_URL}/{query}/'
+            response = requests.get(url=full_url, params=params)
 
-        # Prepare database query
-        query = 'wallets'
-        params = {'address': address}
-        full_url = f'{DJANGO_API_URL}/{query}/'
-        response = requests.get(url=full_url, params=params)
+            if response.status_code != 200:
+                logger.error(f'Wallet Database error: {response.status_code}')
+                return
 
-        if response.status_code != 200:
-            logger.error(f'Wallet Database error: {response.status_code}')
-            return
+            response = json.loads(response.content)[0]
 
-        response = json.loads(response.content)[0]
-
-        for key, value in response.items():
-            setattr(self, key, value)
+            for key, value in response.items():
+                setattr(self, key, value)
 
     def epic_balance(self) -> dict:
         # Send POST request to get wallet balance from network
         query = 'balance'
         full_url = f'{TIPBOT_API_URL}/{query}/'
-        request_data = {'id': self.user}
+        request_data = {'address': self.address, 'id': None}
 
         try:
             response = requests.post(url=full_url, data=json.dumps(request_data))
@@ -111,9 +110,12 @@ class TipBotWallet:
             # Get Epic-Cash price in USD from Coingecko API
             epic_vs_usd = PRICE.price_epic_vs('USD')
             balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+
             response['data']['string'] = epic_balance, balance_in_usd
 
+            self.cached_balance = response
             return response
+
         else:
             return {'error': 0, 'msg': response['msg'], 'data': None}
 
@@ -121,78 +123,111 @@ class TipBotWallet:
         return f"TipBotWallet({self.address})"
 
 
-class TipBotUser:
+class TipBotUser(User):
     """
-    Deserialize TelegramUser JSON data from database and save as object.
+    Extend AIOGRAM User class with extra features
     """
-    def __init__(self,
-                 id: Union[str, int] = None,
-                 is_bot: bool = False,
-                 wallet: TipBotWallet = None,
-                 username: str = '',
-                 first_name: str = None,
-                 language_code: str = None):
-
-        self.id = id
-        self.is_bot = is_bot
-        self.wallet = wallet
-        self.username = username.lower()
-        self.first_name = first_name
-        self.language_code = language_code
-
-        if not self.id and self.username:
-            logger.error(f'No username and id, provide at least one.')
-            return
-
-        params = {'user_id': self.id, 'username': self.username}
-        response = self._query('users', DJANGO_API_URL, params)
-
-        if response.status_code != 200:
-            logger.error(f'TelegramUser Database error: {response.status_code}')
-            return
-
-        response = json.loads(response.content)
-
-        if not response:
-            logger.warning(f'TelegramUser [{self.id}]'
-                           f'{self.username if self.username else self.first_name} '
-                           f'is not registered')
-            raise Exception(f'TelegramUser is not registered')
-
-        for key, value in response[0].items():
-            if key == 'wallet':
-                setattr(self, key, TipBotWallet(address=value[0]))
-            else:
-                setattr(self, key, value)
+    def __init__(self, is_registered: bool = False, **kwargs: typing.Any):
+        super().__init__(**kwargs)
+        self.wallet = TipBotWallet()
+        self.is_registered = is_registered
+        self._update_from_db()
 
     @staticmethod
-    def _query(query: str, url: str, params: dict) -> Response:
+    def from_obj(user: User):
+        # Create new objects based on AIOGRAM User class
+        return TipBotUser(**user.__dict__['_values'])
+
+    @staticmethod
+    def from_dict(data: dict):
+        # Create new objects based on user dictionary
+        return TipBotUser(**data)
+
+    @staticmethod
+    def _api_call(query: str, url: str, params: dict, method='get') -> dict:
         # Prepare database query
         full_url = f'{url}/{query}/'
-        return requests.get(url=full_url, params=params)
+
+        if 'get' in method:
+            response = requests.get(url=full_url, params=params)
+        else:
+            response = requests.post(url=full_url, data=json.dumps(params))
+
+        if response.status_code != 200:
+            return {'error': 1, 'msg': f'Database connection error {response.status_code}', 'data': None}
+
+        return response.json()
+
+    def register(self) -> dict:
+        """
+        Handle Database API calls to create new TipBot User
+        """
+        params = self.__dict__['_values']
+        response = self._api_call(query='users/create', url=DJANGO_API_URL,
+                                  params=params, method='post')
+
+        if not response['error']:
+            self.is_registered = True
+            self._update_from_db()
+
+        return response
+
+    def _update_from_db(self) -> None:
+        """
+        Fetch TipBotUser data from Django Database based on TelegramUser ID
+        If exists save/update the data
+        """
+
+        # Handle when both ID and username is not present
+        if not self.id and self.username:
+            logger.error(f'No username and id')
+            raise Exception(f'No username and id')
+
+        # Prepare params and send requests to database
+        params = {'user_id': self.id, 'username': self.username}
+        response = self._api_call('users', DJANGO_API_URL, params)
+
+        # Handle no user/account case
+        if not response:
+            logger.warning(f'TelegramUser [{self.id}] {self.full_name} is not registered')
+        else:
+            self.is_registered = True
+
+        if self.is_registered:
+            # Save all params from database to object
+            for key, value in response[0].items():
+                if key == 'wallet':
+                    print(key, value)
+                    setattr(self, key, TipBotWallet(address=value[0]))
+                else:
+                    setattr(self, key, value)
 
     def get_url(self):
         # Prepare name and link to profile shown is messages
-        name = self.first_name if self.first_name else self.username.capitalize()
-        return f"[{name}](tg://user?id={self.id})"
+        # return f"[{self.name.capitalize()}](tg://user?id={self.id})"
+        return self.get_mention()
 
-    @classmethod
-    def query_users(cls, num: int, match: str):
+    def query_users(self, num: int, match: str):
         params = {'part_username': match}
-        response = cls._query('users', DJANGO_API_URL, params)
-        users = response.json()
-        return users[:num]
+        response = self._api_call(query='users', url=DJANGO_API_URL, params=params)
 
-    @classmethod
-    def get_users(cls, num: int, random_: bool = False):
-        params = {}
-        response = cls._query('users', DJANGO_API_URL, params)
-        users = response.json()
+        if 'error' not in response.keys():
+            return response[:num]
 
-        if random_:
-            random.shuffle(users)
+    def get_users(self, num: int, random_: bool = False):
+        response = self._api_call(query='users', url=DJANGO_API_URL, params={})
 
-        return users[:num]
+        if 'error' not in response.keys():
+            if random_:
+                random.shuffle(response[0])
+
+            return response[:num]
+
+    def __str__(self):
+        return f"User[{self.full_name}, in_database: {self.is_registered}]"
+
+    def __repr__(self):
+        return self.__str__()
 
 def get_receivers(message: types.Message) -> list:
     """
@@ -219,7 +254,7 @@ def get_receivers(message: types.Message) -> list:
     return receivers
 
 
-def get_address(message: types.Message) -> Union[str, None]:
+def get_address(message: types.Message) -> typing.Union[str, None]:
     """
     Parse receiver vite address from user's messages
     :param message: types.Message (AIOGRAM)
@@ -332,15 +367,13 @@ class WalletGUI:
     """
     Manage different keyboards and GUI messages ('screens')
     """
-    def __init__(self, user: dict, callback: CallbackData):
+    def __init__(self, user: TipBotUser, callback: CallbackData):
         self.user = user
         self.callback = callback
 
     def home_keyboard(self) -> InlineKeyboardMarkup:
         """
         Prepare Wallet GUI InlineKeyboard
-        :param callback: CallbackData instance (aiogram)
-        :param user: TelegramUser dict
         :return: InlineKeyboardMarkup instance (aiogram)
         """
 
@@ -349,7 +382,7 @@ class WalletGUI:
 
         buttons = [InlineKeyboardButton(
             text=f"{icons[i]}{btn.capitalize()}",
-            callback_data=self.callback.new(action=btn, user=self.user['id'], username=self.user['username']))
+            callback_data=self.callback.new(action=btn, user=self.user.id, username=self.user.username))
             for i, btn in enumerate(buttons)]
 
         keyboard_inline = InlineKeyboardMarkup() \
@@ -389,7 +422,6 @@ async def remove_state_messages(state: FSMContext):
                 pass
 
             await delete_message(msg)
-
 
 
 def cancel_keyboard():
