@@ -96,7 +96,7 @@ async def wallet(message: types.Message, state: FSMContext):
 
     response = owner.wallet.epic_balance()
 
-    print(owner.wallet.cached_balance)
+    # print(owner.wallet.cached_balance)
 
     # Handle response error
     if response['error']:
@@ -467,7 +467,7 @@ async def handle_send_epic(query: types.CallbackQuery, state: FSMContext):
 
     private_msg = f"✅ Transaction sent successfully\n" \
                   f"▪️️ [Transaction details (vitescan.io)]({explorer_url})"
-    receiver_msg = f"💸 `{amount} EPIC from` {sender.get_url()}"
+    receiver_msg = f"💸 `{amount} EPIC from ` {sender.get_url()}"
 
     # Send tx confirmation to sender's private chat
     await send_message(text=private_msg, chat_id=private_chat)

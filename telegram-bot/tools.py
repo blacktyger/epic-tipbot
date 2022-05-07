@@ -197,7 +197,7 @@ class TipBotUser(User):
             # Save all params from database to object
             for key, value in response[0].items():
                 if key == 'wallet':
-                    print(key, value)
+                    # print(key, value)
                     setattr(self, key, TipBotWallet(address=value[0]))
                 else:
                     setattr(self, key, value)
