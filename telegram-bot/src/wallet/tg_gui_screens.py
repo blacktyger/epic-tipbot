@@ -21,6 +21,16 @@ f"""
 ====================
 """
 
+def pending_transactions_wallet(*args):
+    plural = 's' if int(args[0]) > 1 else ''
+    return \
+f"""
+*Epic-Cash TipBot Wallet*
+====================
+🟢  `{args[0]} New transaction{plural}`
+⏳ `Updating balance...`
+====================
+"""
 
 def connection_error_wallet():
     return \

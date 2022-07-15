@@ -1,44 +1,48 @@
-import requests
-
 from json import JSONDecodeError
 from decimal import Decimal
 from typing import Union
 import platform
+import random
 import json
+
+import requests
 
 
 class MarketData:
     btc_feed_url = "https://blockchain.info"
     epic_feed_url = "https://api.coingecko.com/api/v3"
 
-    def price_epic_vs(self, currency: str):
+    @classmethod
+    def price_epic_vs(cls, currency: str):
         symbol = currency.upper()
         if len(symbol) == 3:
             try:
-                url = f"{self.epic_feed_url}/simple/price?ids=epic-cash&vs_currencies={symbol}"
+                url = f"{cls.epic_feed_url}/simple/price?ids=epic-cash&vs_currencies={symbol}"
                 data = json.loads(requests.get(url).content)
                 return Decimal(data['epic-cash'][symbol.lower()])
             except JSONDecodeError as er:
                 print(er)
                 return 0
 
-    def price_btc_vs(self, currency: str):
+    @classmethod
+    def price_btc_vs(cls, currency: str):
         symbol = currency.upper()
         if len(symbol) == 3:
             try:
-                url = f"{self.btc_feed_url}/ticker"
+                url = f"{cls.btc_feed_url}/ticker"
                 data = json.loads(requests.get(url).content)
                 return Decimal(data[symbol]['last'])
             except JSONDecodeError as er:
                 print(er)
                 return 0
 
-    def currency_to_btc(self, value: Union[Decimal, float, int], currency: str):
+    @classmethod
+    def currency_to_btc(cls, value: Union[Decimal, float, int], currency: str):
         """Find bitcoin price in given currency"""
         symbol = currency.upper()
         if len(symbol) == 3:
             try:
-                url = f'{self.btc_feed_url}/tobtc?currency={currency}&value={value}'
+                url = f'{cls.btc_feed_url}/tobtc?currency={currency}&value={value}'
                 data = json.loads(requests.get(url).content)
                 return Decimal(data)
             except JSONDecodeError as er:
@@ -46,7 +50,43 @@ class MarketData:
                 return 0
 
 
+class Network:
+    class VITE:
+        name = 'VITE'
+        symbol = 'VITE'
+        is_token = True
+        is_native = False
+        fee = 0
+
+    class EPIC:
+        name = 'EPIC-CASH'
+        symbol = 'EPIC'
+        is_token = False
+        is_native = True
+        fee = 0.007
+
+class Tests:
+    language = ['pl', 'en', 'es']
+    username = [None, 'Mad Max', 'Dearey', 'Pecan', 'Maestro', 'Halfmast', None, 'Peep', 'Boomer',
+                'Coach', None, 'Dirty', 'Harry', 'Peppermint', None, 'Cookie', 'Piglet']
+    first_name = ['Amelia', 'Tomas', 'Homero', 'Celina', 'Macario', 'Cipriano',
+                  'Fidel', 'Borja', 'Otilia', 'Esteban', 'Laura', 'Rodrigo']
+    last_name = ['Ferguson', None, 'Burch', 'Levine', 'Porter', None,
+                 'Sawyer', 'Cooley', 'Brennan', None, 'Burnett', 'Chang']
+
+    def random_user(self):
+        random_id = ''.join([str(random.randint(0, 9)) for x in range(10)])
+        return dict(id=random_id, is_bot=True,
+                    username=random.choice(self.username),
+                    last_name=random.choice(self.last_name),
+                    first_name=random.choice(self.first_name),
+                    language_code=random.choice(self.language)
+                    )
+
+
 class Tipbot:
+    MAX_RECEIVERS = 5
+    TIME_LOCK = 2.2
     ADMIN_ID = '803516752'
     DONATION_ADDRESS = 'vite_0ab437d8a54d52abc802c0e75210885e761d328eaefed14204'
     HELP_STRING = \

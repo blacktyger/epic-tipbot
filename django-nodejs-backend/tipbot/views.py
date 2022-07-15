@@ -1,16 +1,22 @@
+from pprint import pprint
+
 from django.http import JsonResponse
 from rest_framework import viewsets
 from django.db.models import Q
 
-import threading
 import json
 
 from .serializers import WalletSerializer, TransactionSerializer
-from vtm.serializers import TelegramUserSerializer
+from core.js_handler import execute_node_call, send, update_
 from vtm.models import Token, TelegramUser
 from .models import Wallet, Transaction
+from core.logger_ import setup_logging
 from core import utils
 
+
+logger = setup_logging(name=__name__, console_log_output="stdout", console_log_level="info", console_log_color=True,
+                       logfile_file=__name__ + ".log", logfile_log_level="info", logfile_log_color=False,
+                       log_line_template="%(color_on)s[%(asctime)s] [%(threadName)s] [%(levelname)-8s] %(message)s%(color_off)s")
 
 epic_details = {
     'id': 'tti_f370fadb275bc2a1a839c753',
@@ -30,10 +36,19 @@ class WalletView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Wallet.objects.all()
+        wallet_user = self.request.query_params.get('user')
         wallet_address = self.request.query_params.get('address')
-        print(wallet_address)
+        wallet_network = self.request.query_params.get('network')
+
+        if wallet_user:
+            queryset = queryset.filter(Q(user__id=wallet_user) |
+                                       Q(user__username__iexact=wallet_user))
         if wallet_address:
             queryset = queryset.filter(address=wallet_address)
+
+        if wallet_network:
+            queryset = queryset.filter(network=wallet_network)
+
         return queryset
 
 
@@ -42,17 +57,20 @@ class TransactionView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Transaction.objects.all()
-        username = self.request.query_params.get('username')
-        user_id = self.request.query_params.get('user_id')
+
+        id = self.request.query_params.get('id')
         address = self.request.query_params.get('address')
+        username = self.request.query_params.get('username')
 
         if address:
             queryset = queryset.filter(Q(sender__address=address) | Q(address=address))
-        if user_id:
-            queryset = queryset.filter(Q(sender__user__id=user_id) | Q(receiver__user__id=user_id))
+        if id:
+            queryset = queryset.filter(Q(sender__user__id=id) | Q(receiver__user__id=id))
         if username:
-            queryset = queryset.filter(Q(sender__user__username=username) | Q(receiver__user__username=username))
+            queryset = queryset.filter(Q(sender__user__username__iexact=username) |
+                                       Q(receiver__user__username__ieaxact=username))
 
+        logger.info(f"[{username, id, address}]: get_transactions api call")
         return queryset.filter(status='success')
 
 
@@ -61,85 +79,50 @@ def send_transaction(request):
     End-point for POST request with TelegramUser and Transaction data to send
     """
     data = json.loads(request.body)
-    receiver_wallet = None
-
-    # // === VALIDATE PARAMS FOR TRANSACTION === \\
-    # Handle Sender wallet from DB, we use Telegram ID's to identify sender
     sender = TelegramUser.objects.filter(id=data['sender']['id']).first()
-
-    # If no UserTelegram prompt that sender need to create account
-    if not sender:
-        response = {'error': 1, 'msg': f"sender have no account", 'data': None}
-        return JsonResponse(response)
+    sender_wallet = sender.wallet.first()
+    # logger.critical(f"\n tipbot::send_transaction() - payload from user: {data}")
 
     # Prevent accidental multiple transactions
     if sender.locked:
-        response = {'error': 1, 'msg': f"transaction already in progress", 'data': None}
+        response = {'error': 1, 'msg': f"Too many transactions, please wait couple seconds.", 'data': None}
+        logger.error(f"[{data['sender']}]: {response['msg']}")
         return JsonResponse(response)
 
-    sender_wallet = Wallet.objects.filter(user__id=data['sender']['id']).first()
-
-    # If no Sender Wallet prompt warning
-    if not sender_wallet:
-        response = {'error': 1, 'msg': f"sender wallet not found", 'data': None}
-        return JsonResponse(response)
-
-    # Handle Receiver wallet from DB (if given),
-    # we use Telegram usernames to identify receiver
-    receiver_as_user = data['receiver']['username']
-
-    if receiver_as_user:
-        receiver_as_user = receiver_as_user.lower()
-        receiver = TelegramUser.objects.filter(username=receiver_as_user).first()
-
-        # If no UserTelegram prompt that receiver need to create account
-        if not receiver:
-            response = {'error': 1, 'msg': f"receiver have no account.", 'data': None}
-            return JsonResponse(response)
-
-        # If no Receiver Wallet prompt warning
-        receiver_wallet = Wallet.objects.filter(user=receiver).first()
-
-        if not receiver_wallet:
-            response = {'error': 1, 'msg': f"receiver wallet not found", 'data': None}
-            return JsonResponse(response)
-
-        address = receiver_wallet.address
-
-    # If no receiver try to parse recipient address
-    elif data['address']:
-        address = data['address']
-
-    else:
-        response = {'error': 1, 'msg': f"invalid receiver or address", 'data': None}
-        return JsonResponse(response)
-
-    # If something wrong with amount
+    # If something is wrong with the amount
     if not data['amount']:
         response = {'error': 1, 'msg': f"invalid amount", 'data': None}
+        logger.error(f"[{sender}]: {response['msg']}")
         return JsonResponse(response)
-    # ========================================
 
-    # // === SAVE AND SEND TRANSACTION === \\
     tx_params = {
         'sender': sender_wallet,
-        'receiver': receiver_wallet,
-        'address': address,
         'token': epic,
-        'amount': data['amount']
+        'amount': data['amount'],
+        'type_of': data['type_of'],
+        'network': data['network']
         }
 
-    tx = Transaction.objects.create(**tx_params)
-    print(tx)
+    # Handle withdraw transaction (address as receiver)
+    if 'withdraw' in data['type_of']:
+        tx_params.update({'address': data['address']})
 
-    # Prepare and send POST request to back-end Vite API
+    # Handle send transaction (TipBotUser as receiver)
+    elif 'send' in data['type_of'] or 'tip' in data['type_of']:
+        receiver = TelegramUser.objects.filter(id=data['receiver']['id']).first()
+        tx_params.update({'receiver': receiver.wallet.first()})
+
+    # Create and save Transaction to database
+    tx = Transaction.objects.create(**tx_params)
+
+    # Prepare and execute back-end Vite.js script
     tx_params = {
         'mnemonics': tx.sender.decrypt_mnemonics(),
         'toAddress': tx.prepare_address(),
         'tokenId': tx.token.id,
         'amount': tx.prepare_amount()
         }
-    transaction = utils.vite_api_call(query='send_transaction', params=tx_params)
+    transaction = send(**tx_params)
 
     # Update tx status and network transaction data:
     # if success save tx hash, else error msg.
@@ -147,40 +130,31 @@ def send_transaction(request):
         tx.data = {'hash': transaction['data']['hash']}
         tx.status = 'success'
         tx.save()
+        logger.info(f"tipbot::views::send_transaction() - {tx}")
 
+        # Lock account to prevent spam/unwanted transactions
         sender.temp_lock()
 
         tx = TransactionSerializer(tx)
-        payload = {'transaction': tx.data}
+        response = {'error': 0, 'msg': 'send success', 'data': tx.data['data']}
 
-        if receiver_as_user:
-            # Start thread to update receiver balance in background
-            receiver_update = threading.Thread(target=utils.receive_transactions, args=[receiver_wallet])
-            print(f"Starting update wallet {receiver_wallet} thread...")
-            receiver_update.start()
-            receiver_update.join()
-
-            # Serialize TelegramUser instances
-            receiver = TelegramUserSerializer(receiver)
-            payload['receiver'] = receiver.data
-
-        response = {'error': 0, 'msg': 'send success', 'data': payload}
     else:
         # Update transaction status in database and prepare failed response
         tx.status = 'failed'
         tx.data = {'error': transaction['msg']}
         tx.save()
         response = {'error': 1, 'msg': transaction['msg'], 'data': None}
+        logger.error(f"tipbot::views::send_transaction() - {response['msg']}")
 
-    print(f'[{sender_wallet}] send_transaction: ', response['msg'])
     return JsonResponse(response)
+#
 
 
 def get_address(request):
     """
-    End-point for POST request with TelegramUser
-    data to retrieve wallet address
-    """
+        End-point for POST request with TelegramUser
+        data to retrieve wallet address
+        """
     response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
 
     user = json.loads(request.body)
@@ -188,6 +162,31 @@ def get_address(request):
 
     if wallet:
         response = {'error': 0, 'msg': f'[{wallet}] success _get_address_ call', 'data': wallet.address}
+        logger.info(f"[{wallet.user}]: {response['msg']}")
+
+    return JsonResponse(response)
+
+
+def update(request):
+    """
+    End-point for POST request with TelegramUser
+    data to receive wallet pendingTransactions
+    """
+    payload = json.loads(request.body)
+    logger.info(f"tipbot::views::get_update_balance() - {payload}")
+
+    wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
+                                   Q(address=payload['address'])).first()
+    response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
+
+    if not wallet: return JsonResponse(response)
+
+    # Set timeout to get 10sec for each pending tx to avoid pre-time failures
+    timeout = payload['num'] * 10
+    update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
+    response = {'error': 0, 'msg': 'success update', 'data': None}
+
+    # if '[object Object]' in response['msg']:
 
     return JsonResponse(response)
 
@@ -200,25 +199,20 @@ def get_balance(request):
     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
 
     payload = json.loads(request.body)
-    print(payload)
+    logger.info(f"tipbot::views::get_balance() - {payload}")
+
     wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
                                    Q(address=payload['address'])).first()
-    print(wallet)
 
-    if wallet:
-        params = {'mnemonics': wallet.decrypt_mnemonics()}
-        balance = utils.vite_api_call(query='balance', params=params)
-        if not balance['error']:
-            wallet.balance = balance['data']
-            wallet.save()
+    if not wallet: return JsonResponse(response)
 
-            if wallet.balance['pendingTransactions']:
-                response = {'error': 0, 'msg': 'Updating', 'data': 'Updating balance...'}
-            else:
-                response = utils.parse_vite_balance(balance['data'])
-        else:
-            response = {'error': 1, 'msg': balance['msg'], 'data': None}
+    balance = execute_node_call(func='balance', mnemonics=wallet.decrypt_mnemonics())
 
-    print(f"[{wallet}] get_balance: {response['msg']}")
+    if balance['error']: return JsonResponse(balance)
+
+    wallet.balance = balance['data']
+    wallet.save()
+    response = {'error': 0, 'msg': 'success', 'data': wallet.balance}
+
     return JsonResponse(response)
 

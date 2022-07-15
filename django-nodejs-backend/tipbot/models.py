@@ -8,9 +8,10 @@ from vtm.models import Token
 
 class Wallet(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wallet')
+    network = models.CharField(max_length=16, default='VITE')
     address = models.CharField(max_length=58, unique=True, primary_key=True)
     balance = models.JSONField(default=dict)
-    mnemonics = models.TextField(max_length=512, blank=True, null=True)
+    mnemonics = models.TextField(max_length=2056, blank=True, null=True)
 
     objects = models.Manager()
 
@@ -21,17 +22,29 @@ class Wallet(models.Model):
         except Exception:
             return self.mnemonics
 
+    def readable_balance(self):
+        epic_id = 'tti_f370fadb275bc2a1a839c753'
+
+        if self.balance and 'balanceInfoMap' in self.balance.keys() \
+            and epic_id in self.balance['balanceInfoMap'].keys():
+
+            epic = self.balance['balanceInfoMap'][epic_id]
+            as_int = int(epic['balance'])
+            decimals = epic['tokenInfo']['decimals']
+            return round((as_int / 10**decimals), 8)
+
     def __str__(self):
-        return f"{self.user.username}"
+        return f"Wallet({self.user.mention} | {self.network} | {self.readable_balance()} EPIC)"
 
 
 class Transaction(models.Model):
+    network = models.CharField(max_length=16, default='VITE')
     token = models.ForeignKey(Token, blank=True, null=True, on_delete=models.SET_NULL, related_name='token')
     sender = models.ForeignKey(Wallet, null=True, on_delete=models.SET_NULL, related_name='sender_wallet')
     receiver = models.ForeignKey(Wallet, blank=True, null=True, on_delete=models.SET_NULL, related_name='receiver_wallet')
-
     address = models.CharField(max_length=58, null=True, blank=True)
     amount = models.DecimalField(decimal_places=8, max_digits=32, null=True)
+    type_of = models.CharField(max_length=16, null=True, blank=True)
     status = models.CharField(max_length=10, default='pending')
     data = models.JSONField(default=dict)
     message = models.TextField(null=True, blank=True)
@@ -42,12 +55,14 @@ class Transaction(models.Model):
     class Meta:
         ordering = ('-timestamp', )
 
+    def logs_repr(self):
+        return f"Transaction({self.network} | {self.amount} {self.token.symbol} | " \
+               f"{self.sender.user.mention if self.sender else ''} to --> " \
+               f"{self.receiver.user.mention if self.receiver else self.address} |" \
+               f" {self.type_of} | {self.status})"
+
     def __str__(self):
-        if self.sender:
-            return f"Transaction({self.sender.user.username} -> {self.amount} -> " \
-                   f"{self.receiver.user.username if self.receiver else self.address})"
-        else:
-            return f"Transaction({self.token} {self.amount}, {self.status})"
+        return self.logs_repr()
 
     def prepare_amount(self):
         dec = 10 ** self.token.decimals if self.token else 8

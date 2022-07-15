@@ -1,6 +1,7 @@
 import threading
 import time
 
+from django.db.models import UniqueConstraint
 from unixtimestampfield.fields import UnixTimeStampField
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -12,7 +13,7 @@ from .managers import CustomUserManager
 
 
 class TelegramUser(AbstractUser):
-    id = models.IntegerField(unique=True, primary_key=True)
+    id = models.BigIntegerField(unique=True, primary_key=True)
     is_bot = models.BooleanField(default=False)
     locked = models.BooleanField(default=False)
     username = models.CharField(max_length=128, blank=True, null=True)
@@ -26,7 +27,10 @@ class TelegramUser(AbstractUser):
     objects = CustomUserManager()
 
     class Meta:
-        unique_together = ('id', 'username')
+        constraints = [
+            UniqueConstraint(fields=('id', 'username'), name='id_and_username'),
+            UniqueConstraint(fields=('id', 'first_name'), name='id_and_first_name'),
+            ]
 
     def temp_lock(self, time_: int = 2):
         self.locked = True
@@ -41,8 +45,39 @@ class TelegramUser(AbstractUser):
             self.locked = False
             self.save()
 
+    @property
+    def full_name(self):
+        """
+        You can get full name of user.
+
+        :return: str
+        """
+        full_name = self.first_name
+        if self.last_name:
+            full_name += ' ' + self.last_name
+        return full_name
+
+    @property
+    def name(self):
+        if self.username:
+            return self.username
+        else:
+            return self.full_name
+
+    @property
+    def mention(self):
+        """
+        You can get user's username to mention him
+        Full name will be returned if user has no username
+
+        :return: str
+        """
+        if self.username:
+            return '@' + self.username
+        return self.full_name
+
     def __str__(self):
-        return f"[{self.id}] {self.username}"
+        return f"{self.name}({self.id})"
 
 
 class Token(models.Model):

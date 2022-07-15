@@ -5,11 +5,15 @@
 .idea/
 .gitignore
 
+
 /django-nodejs-backend/package-lock.json
 /django-nodejs-backend/node_modules/
 /django-nodejs-backend/static/src/js/node_modules/
 /django-nodejs-backend/static/src/js/package-lock.json
 /django-nodejs-backend/static/src/js/test_send.js
+/django-nodejs-backend/static/src/js/vite-api-server.js
+/django-nodejs-backend/static/src/js/send.js
+/django-nodejs-backend/static/src/js/notepad.js
 
 /django-nodejs-backend/core/secrets.py
 /django-nodejs-backend/core/__pycache__/
@@ -19,9 +23,14 @@
 /django-nodejs-backend/vtm/__pycache__/
 /django-nodejs-backend/db.sqlite3
 
-/telegram-bot/keys.py
 /telegram-bot/main.log
+/telegram-bot/test.log
+/telegram-bot/test.py
 /telegram-bot/__pycache__/
+/telegram-bot/src/__pycache__/
+/telegram-bot/src/wallet/__pycache__/
 /telegram-bot/tipbot_storage.pickle
 
 
+/telegram-bot/src/keys.py
+/telegram-bot/src/inline_beta.py
