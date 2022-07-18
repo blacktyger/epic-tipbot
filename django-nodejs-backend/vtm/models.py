@@ -19,6 +19,7 @@ class TelegramUser(AbstractUser):
     username = models.CharField(max_length=128, blank=True, null=True)
     last_name = models.CharField(max_length=128, blank=True, null=True)
     first_name = models.CharField(max_length=128, blank=True, null=True)
+    is_premium = models.BooleanField(default=False)
     language_code = models.CharField(max_length=16, blank=True, null=True)
 
     USERNAME_FIELD = 'id'
