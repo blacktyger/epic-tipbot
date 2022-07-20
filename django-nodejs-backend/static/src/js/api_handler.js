@@ -4,6 +4,7 @@ import {
     sendTransaction,
     getTransactions,
     receiveTransactions,
+    checkAddressBalance,
 } from './vite-api-wallet.js';
 
 import _yargs from 'yargs';
@@ -18,10 +19,11 @@ node <this_file_path> <api_call> <arg1> <arg2> etc...
 
 COMMANDS & ARGS:
 - create    no args
-- balance   -m <mnemonics> -i <address_derivation_id>
-- update    -m <mnemonics> -i <address_derivation_id>
-- send      -m <mnemonics> -i <address_derivation_id>
-            -d <destination_address> -t <tokenId> -a <amount>
+- balance           -m <mnemonics> -i <address_derivation_id>
+- addressBalance    -a <address>
+- update            -m <mnemonics> -i <address_derivation_id>
+- send              -m <mnemonics> -i <address_derivation_id>
+                    -d <destination_address> -t <tokenId> -a <amount>
 
 */
 
@@ -39,6 +41,10 @@ switch (args._[0]) {
 
     case 'balance':
         await balance(args.m, args.i)
+        break
+
+    case 'addressBalance':
+        await addressBalance(args.a)
         break
 
     case 'update':
@@ -61,6 +67,16 @@ switch (args._[0]) {
 /*  #########################
     ### COMMAND FUNCTIONS ### 
     #########################   */
+
+
+async function addressBalance (address) {
+    try {
+        const balance = await checkAddressBalance(address);
+        logAndExit(0, `${args._[0]} success`, balance);
+    } catch (error){
+        logAndExit(1, error)
+    }
+}
 
 
 // Send transaction

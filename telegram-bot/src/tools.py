@@ -1,5 +1,4 @@
 from aiogram.contrib.fsm_storage.files import PickleStorage
-from aiogram import types
 import requests
 
 import decimal
@@ -65,10 +64,11 @@ def api_call(query: str, url: str, params: dict, method='get', timeout=5) -> dic
             try:
                 # try standard response scheme
                 if not r_json['error']:
+                    msg = r_json['msg'] if 'msg' in r_json.keys() else 'success'
+                    response = {'error': 0, 'msg': msg, 'data': r_json['data']}
                     logger.info(f"tools::api_call({query}) - db response: {r_json}")
-                    response = {'error': 0, 'msg': 'success', 'data': r_json['data']}
                 else:
-                    logger.error(f"tools::api_call({query}) - db response: {r_json}")
+                    logger.warning(f"tools::api_call({query}) - db response: {r_json}")
                     response = r_json
             except:
                 logger.info(f"tools::api_call({query}) - db response(?): {r_json}")

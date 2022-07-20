@@ -32,7 +32,7 @@ def update_(**kwargs):
 
 def send(**kwargs):
     mnemonics = kwargs['mnemonics']
-    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 10
+    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 20
     address = kwargs['toAddress']
     amount = str(kwargs['amount'])
     token = kwargs['tokenId']
@@ -61,7 +61,7 @@ def execute_node_call(**kwargs):
     This is a dirty solution but works well :)
     """
     tries = kwargs['tries'] if 'tries' in kwargs.keys() else 5
-    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 15
+    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 10
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for i in range(tries):

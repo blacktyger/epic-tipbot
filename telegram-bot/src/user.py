@@ -2,6 +2,7 @@ import typing
 import random
 
 from aiogram.types import User
+from aiogram.utils import markdown
 
 from . import tools, logger, DJANGO_API_URL
 from .wallet import ViteWallet
@@ -16,7 +17,7 @@ class TipBotUser(User):
 
     def __init__(self, is_registered: bool = False, **kwargs: typing.Any):
         super().__init__(**kwargs)
-        self.wallet = ViteWallet
+        self.wallet = None
         self.is_registered = is_registered
 
         # temp_user is used to access some instance methods,
@@ -51,29 +52,30 @@ class TipBotUser(User):
     def _update_to_db(self):
         """Update database with values from user obj, ID required"""
         if self.id:
-            logger.info(f"TipBotUser::_update_to_db() - updating database {self.params()}")
+            logger.info(f"TipBotUser::_update_to_db({self.params()})")
             return self._api_call('users/create', self.params(), method='post')
 
     def _get_wallet_from_db(self, address):
         self.wallet = ViteWallet(owner=self, address=address)
-        logger.info(f"TipBotUser::_get_wallet_from_db() - returned wallet: {self.wallet}")
+        logger.info(f"TipBotUser::_get_wallet_from_db() -> {self.wallet}")
 
     def _update_from_db(self) -> None:
         """
         Get TipBotUser data from Django Database, if exists save/update the data
         This method is used everytime when instance is created or registered to db.
         """
+        need_update = False
 
         # Handle when ID, first_name and username is not present
         if not self.id and not self.first_name and not self.username:
             logger.error(f'No first_name, username and id')
             raise Exception(f'No first_name, username and id')
 
-        logger.info(f'TipBotUser::_update_from_db() - payload: {self.params()}')
+        logger.info(f'TipBotUser::_update_from_db({self.params()})')
 
         # Send requests with params to database
         response = self._api_call('users', self.params())
-        logger.info(f'TipBotUser::_update_from_db() - response: {response["data"]}')
+        logger.info(f'TipBotUser::_update_from_db() -> {response["data"]}')
 
         # Handle api_call error:
         if response['error']:
@@ -109,13 +111,18 @@ class TipBotUser(User):
                     value_from_user = str(getattr(self, key)) if getattr(self, key) else None
                     value_from_db = str(value)
 
-                    if value_from_user and value_from_user not in value_from_db:
-                        logger.warning(f"TipBotUser::_update_from_db() - updating  '{key}' value - "
-                                       f"new (from user): {getattr(self, key)} | old (from db): {value}")
+                    if value_from_user and value_from_user != value_from_db:
+                        need_update = True
+                        logger.warning(f"TipBotUser::_update_from_db({key}) NEED UPDATE: "
+                                       f"(user): {getattr(self, key)} | (db): {value}")
 
                     # Handle saving values from database to instance
                     else:
                         setattr(self, key, value)
+
+            # If any value in database was outdated update it
+            if need_update:
+                self._update_to_db()
 
     def register(self):
         """
@@ -140,9 +147,13 @@ class TipBotUser(User):
 
         return response
 
+    def get_mention(self, name=None, as_html=None) -> str:
+        return markdown.bold(f"@{self.name}") if self.username else \
+            markdown.bold(markdown.link(self.name, self.url))
+
     def get_url(self):
         """Prepare name and link to profile shown in messages"""
-        return self.get_mention()
+        return self.get_mention().replace('\\', '')
 
     @classmethod
     def get_user(cls, key_word):
@@ -199,4 +210,3 @@ class TipBotUser(User):
 
     def __repr__(self):
         return self.log_repr()
-

@@ -1,4 +1,5 @@
 """ "Graphical Interface" for EpicTipBot Wallet in Telegram chat window"""
+
 from datetime import datetime, timedelta
 import threading
 import typing
@@ -11,7 +12,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 from aiogram import types
+from babel.localedata import Alias
 
+from .alias_wallet import Wallet as AliasWallet
 from .. import logger, bot, tools, Tipbot
 from .tg_gui_screens import *
 
@@ -163,27 +166,41 @@ class WalletGUI:
                             logger.info(f"Wallet::get_tip_receivers() - unknown_receiver by text_mention: {receiver}")
                             unknown_receivers.append(receiver)
 
+                elif user_mention['type'] == 'hashtag':
+                    # Handle if receiver is an AccountAlias link
+                    start = user_mention.offset
+                    stop = start + user_mention.length
+                    title = message.text[start:stop]
+                    receiver = AliasWallet(title=title).get()
+
+                    if receiver:
+                        logger.info(f"Wallet::get_tip_receivers({title}) - parsed receiver from # alias: {receiver}")
+                        registered_receivers.append(receiver)
+
             return registered_receivers, unknown_receivers
 
         else:
             # Try to parse receiver based on raw string
             try:
                 match = message.parse_entities().split(' ')[1]
+                print(match)
 
                 if tools.is_int(match):
                     # Try to find user with given ID
                     receiver = self.user.fom_dict({'id': tools.is_int(match)})
 
                     if receiver.is_registered:
-                        logger.info(f"Wallet::get_tip_receivers() - parsed receiver without mention: {receiver}")
+                        logger.info(f"Wallet::get_tip_receivers({match}) - parsed receiver without mention: {receiver}")
                         registered_receivers.append(receiver)
+
                 else:
                     # Try to find user with given @username
-                    receiver = self.user.fom_dict({'username': match})
+                    if match.startswith('@'):
+                        receiver = self.user.fom_dict({'username': match})
 
-                    if receiver.is_registered:
-                        logger.info(f"Wallet::get_tip_receivers() - parsed receiver without mention: {receiver}")
-                        registered_receivers.append(receiver)
+                        if receiver.is_registered:
+                            logger.info(f"Wallet::get_tip_receivers({match}) - parsed receiver without mention: {receiver}")
+                            registered_receivers.append(receiver)
 
             except Exception as e:
                 logger.error(f'Error parsing receiver {e}')
@@ -384,7 +401,7 @@ class WalletGUI:
         await DonateStates.ask_for_amount.set()
 
         # Send message about amount
-        ask_for_amount = await self.send_message(text='💵 How much donate to developer?',
+        ask_for_amount = await self.send_message(text='💵 How much you would like to donate?',
                                                  chat_id=self.user.id,
                                                  reply_markup=self.donate_keyboard())
         # Save message to remove to temp storage
@@ -407,7 +424,7 @@ class WalletGUI:
 
         # Prepare confirmation string and keyboard
         confirmation_string = f" ☑️ Confirm your donation:\n\n" \
-                              f"`▪️ Send {amount} EPIC to developer`"
+                              f"`▪️ Donate {amount} EPIC to developer`"
 
         confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
         confirmation_keyboard.row(
@@ -422,6 +439,40 @@ class WalletGUI:
 
         # Save message to remove to temp storage
         await state.update_data(msg_confirmation=confirmation)
+
+    async def register_alias(self, message: types.Message, alias: AliasWallet):
+        response = alias.register()
+
+        try:
+            if response['error']:
+                msg = f"🟡 Alias registration failed, {response['msg']}"
+            else:
+                msg = f"✅ Alias #{alias.title}:{alias.short_address()} created successfully!"
+        except Exception as e:
+            logger.error(f"main::create_account_alias() -> {str(e)}")
+            msg = f"🟡 New alias registration failed."
+
+        await self.send_message(text=msg, chat_id=message.chat.id)
+
+    async def alias_details(self, message: types.Message):
+        # Parse user text and prepare params
+        cmd, alias_title = message.text.split(' ')
+
+        # API call to database to get AccountAlias by #alias
+        alias = AliasWallet(title=alias_title).get()
+
+        if not alias: return
+
+        balance = alias.balance()
+
+        title = f"🏷  #{alias.title.capitalize()} Funding\n\n"
+        value = f"💰  {tools.float_to_str(balance)} EPIC\n"
+        owner = f"👤  {alias.details['owner']}\n" if 'owner' in alias.details else ''
+        link = f"➡️  {alias.details['url'].replace('https://', '')}" if 'url' in alias.details else ''
+
+        msg = f"<b>{title}{value}</b>{owner}{link}"
+
+        await bot.send_message(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.HTML)
 
     async def send_tip_cmd(self, message):
         """
@@ -439,6 +490,8 @@ class WalletGUI:
 
         # Parse receivers
         registered, unknown = self.get_receivers(message)
+
+        print(registered, unknown)
 
         # Handle no receivers case, display feedback as self-delete message
         if not registered and not unknown:
@@ -488,8 +541,7 @@ class WalletGUI:
 
                     if not fail_errors:
                         await self.tip_error_handler(edited_message)
-
-                    fail_errors += 1
+                        fail_errors += 1
 
             else:
                 success_receivers.append(params['receivers'][i])
@@ -502,19 +554,19 @@ class WalletGUI:
                 if not params['sender'].is_bot:
                     await self.send_message(text=private_msg, chat_id=params['sender'].id)
 
-                # Send notification to receiver's private chat
                 if not params['receivers'][i].is_bot:
+                    # Send notification to receiver's private chat
                     await self.send_message(text=receiver_msg, chat_id=params['receivers'][i].id)
 
-                # Run threading process to update receiver balance (receiveTransactions call)
-                logger.critical(
-                    f"ViteWallet::gui::send_tip() - start balance update for {params['receivers'][i].mention}")
-                threading.Thread(target=params['receivers'][i].wallet.update_balance).start()
+                    # Run threading process to update receiver balance (receiveTransactions call)
+                    logger.critical(
+                        f"ViteWallet::gui::send_tip() - start balance update for {params['receivers'][i].mention}")
+                    threading.Thread(target=params['receivers'][i].wallet.update_balance).start()
 
         # Finalize with final feedback
         if len(success_receivers) > 1:
             public_msg = f"🎉️ {params['sender'].get_url()} multi-tipped `{amount} EPIC` to:\n" \
-                         f" {' | '.join([receiver.get_url() for receiver in success_receivers])}"
+                         f" {', '.join([receiver.get_url() for receiver in success_receivers])}"
         elif len(success_receivers) > 0:
             public_msg = f"❤️ {params['sender'].get_url()} tipped " \
                          f"`{amount} EPIC` to {params['receivers'][0].get_url()}"
@@ -530,18 +582,21 @@ class WalletGUI:
         logger.info(f"{params['sender'].mention}: tipped {amount} to {params['receivers']}")
 
     def auto_delete(self, message, delta):
+        """Add job to scheduler with time in seconds from now to run the task"""
         date = datetime.now() + timedelta(seconds=delta)
         scheduler.add_job(self.delete_message, "date", run_date=date, kwargs={"message": message})
 
     async def tip_invalid_receiver_handler(self, message):
         await self.delete_message(message)
-        no_receiver_msg = f"💬️ {self.user.mention}, {' '.join(message.text.split(' ')[1:-1])} is not a valid user."
+        no_receiver_msg = f"💬️ {self.user.mention}, {' '.join(message.text.split(' ')[1:-1])} is not a valid receiver."
 
         warning_message = await bot.send_message(text=no_receiver_msg, chat_id=message.chat.id,
-                                                 parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-        self.auto_delete(warning_message, 5)
+                                                 parse_mode=ParseMode.HTML,
+                                                 reply_markup=self.confirm_failed_tip_keyboard(),
+                                                 disable_web_page_preview=True)
+        self.auto_delete(warning_message, 30)
 
-    async def tip_no_receiver_handler(self, message):
+    async def tip_no_receiver_handler(self, message: types.Message):
         await self.delete_message(message)
         no_receiver_msg = f"👋 <b>Hey {message.text.split(' ')[1]}</b>,\n" \
                           f"{self.user.mention} is trying to tip you!\n\n" \
@@ -656,7 +711,7 @@ class WalletGUI:
         try:
             await message.delete()
         except (MessageToDeleteNotFound, MessageCantBeDeleted) as e:
-            logger.error(f"{message.from_user.mention}: {e}")
+            logger.warning(f"{message.from_user.mention}: {e}")
             pass
 
     async def remove_state_messages(self, state: FSMContext):

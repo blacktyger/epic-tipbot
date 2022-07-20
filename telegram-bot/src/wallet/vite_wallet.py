@@ -1,14 +1,12 @@
 from aiogram.types import ParseMode
 from aiogram import types
-import requests
 
 import threading
 import decimal
-import json
 import time
 
 from .base_wallet import Wallet
-from .. import tools, logger, TIPBOT_API_URL, Tipbot, bot, settings, DJANGO_API_URL
+from .. import tools, logger, Tipbot, bot, settings
 
 
 class ViteWallet(Wallet):
@@ -18,6 +16,7 @@ class ViteWallet(Wallet):
     """
 
     def __init__(self, owner: object, address: str):
+        self.gui = None
         super().__init__(owner=owner, address=address, network=settings.Network.VITE.name)
         if not self.is_valid_address(address):
             raise Exception("Invalid VITE address")
@@ -265,13 +264,13 @@ class ViteWallet(Wallet):
             # Build and send tip transaction
             params = {
                 'sender': payload['sender'].params(),
-                'receiver': receiver.params(),
                 'amount': payload['amount'],
+                'network': settings.Network.VITE.symbol,
                 'type_of': 'tip',
-                'network': settings.Network.VITE.symbol
+                'receiver': receiver.params()
                 }
 
-            logger.info(f"ViteWallet::send_tip() - sending tip: {params}")
+            logger.info(f"ViteWallet::send_tip({params})")
             response = self._api_call('send_transaction', params, method='post', api_url=self.API_URL2)
 
             # Handle error from VITE network

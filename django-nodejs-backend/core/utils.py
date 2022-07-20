@@ -6,7 +6,7 @@ from .js_handler import create
 from .secrets import secret_links_login, secret_links_key, encryption_key
 from vtm.models import Token, TelegramUser
 from .secret_links import OneTimeSecret
-from tipbot.models import Wallet
+from tipbot.models import Wallet, AccountAlias
 
 
 def get_or_create_telegram_user(request) -> tuple:
@@ -98,6 +98,20 @@ def create_wallet_secret(wallet: Wallet, request) -> str:
     except Exception:
         print(f"Secret messages server overload, testing?")
         return 'failed secret message'
+
+
+def readable_balance(balance: dict):
+    """Parse Vite API addressBalance to readable form"""
+    epic_id = 'tti_f370fadb275bc2a1a839c753'
+
+    if balance and 'balanceInfoMap' in balance.keys() \
+        and epic_id in balance['balanceInfoMap'].keys():
+        epic = balance['balanceInfoMap'][epic_id]
+        as_int = int(epic['balance'])
+        decimals = epic['tokenInfo']['decimals']
+        return round((as_int / 10 ** decimals), 8)
+    else:
+        return 0.0
 
 
 def is_valid_vite_address(address: str) -> bool:

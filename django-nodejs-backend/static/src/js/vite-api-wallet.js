@@ -5,7 +5,7 @@ import pkg3 from '@vite/vitejs-http';
 
 export { 
     createWallet, checkBalance, getTransactions, 
-    receiveTransactions, sendTransaction, 
+    receiveTransactions, sendTransaction, checkAddressBalance
 };
 
 const { utils, accountBlock, ViteAPI, wallet } = pkg;
@@ -39,7 +39,12 @@ async function checkBalance(mnemonics, address_id=0) {
     // Check balance and return
     let balance = await http_provider.getBalanceInfo(address);
     return balance
-};
+}
+
+async function checkAddressBalance(address) {
+    const {balance, unreceived} = await http_provider.getBalanceInfo(address)
+    return balance
+}
 
 
 // --- UPDATE BALANCE / RECEIVE TRANSACTION --- \\
@@ -57,7 +62,7 @@ async function receiveTransactions(mnemonics, address_id) {
     });
 
     return ReceiveTask
-};
+}
 
 
 // --- GET TRANSACTION LIST --- \\

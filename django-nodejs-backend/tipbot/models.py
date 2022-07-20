@@ -10,7 +10,7 @@ class Wallet(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wallet')
     network = models.CharField(max_length=16, default='VITE')
     address = models.CharField(max_length=58, unique=True, primary_key=True)
-    balance = models.JSONField(default=dict)
+    balance = models.JSONField(default=dict, null=True)
     mnemonics = models.TextField(max_length=2056, blank=True, null=True)
 
     objects = models.Manager()
@@ -36,6 +36,19 @@ class Wallet(models.Model):
     def __str__(self):
         return f"Wallet({self.user.mention} | {self.network} | {self.readable_balance()} EPIC)"
 
+
+class AccountAlias(models.Model):
+    """Represents alias for vite account"""
+    tag = models.CharField(max_length=1, default='#')
+    title = models.CharField(max_length=64, unique=True)
+    owner = models.ForeignKey('vtm.TelegramUser', null=True, on_delete=models.SET_NULL, related_name='owner')
+    address = models.CharField(max_length=58)
+    network = models.CharField(max_length=16, default='VITE')
+    details = models.JSONField(default=dict, null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"#{self.title}({self.address[0:8]}...{self.address[-4:]})"
 
 class Transaction(models.Model):
     network = models.CharField(max_length=16, default='VITE')

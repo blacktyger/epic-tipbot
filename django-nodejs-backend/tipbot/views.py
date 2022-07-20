@@ -1,17 +1,16 @@
-from pprint import pprint
-
+from django.views.generic import CreateView
 from django.http import JsonResponse
 from rest_framework import viewsets
 from django.db.models import Q
 
 import json
 
-from .serializers import WalletSerializer, TransactionSerializer
+from .serializers import WalletSerializer, TransactionSerializer, AccountAliasSerializer
 from core.js_handler import execute_node_call, send, update_
 from vtm.models import Token, TelegramUser
-from .models import Wallet, Transaction
+from .models import Wallet, Transaction, AccountAlias
 from core.logger_ import setup_logging
-from core import utils
+from core import utils, js_handler
 
 
 logger = setup_logging(name=__name__, console_log_output="stdout", console_log_level="info", console_log_color=True,
@@ -52,6 +51,23 @@ class WalletView(viewsets.ModelViewSet):
         return queryset
 
 
+class AccountAliasView(viewsets.ModelViewSet):
+    serializer_class = AccountAliasSerializer
+
+    def get_queryset(self):
+        queryset = AccountAlias.objects.all()
+        address = self.request.query_params.get('address')
+        title = self.request.query_params.get('title')
+
+        if address:
+            queryset = queryset.filter(address=address)
+
+        if title:
+            queryset = queryset.filter(title=title)
+
+        return queryset
+
+
 class TransactionView(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
 
@@ -74,6 +90,31 @@ class TransactionView(viewsets.ModelViewSet):
         return queryset.filter(status='success')
 
 
+class AccountAliasCreateView(CreateView):
+    model = AccountAlias
+    fields = '__all__'
+
+    def post(self, request, *args, **kwargs):
+        payload = json.loads(request.body)
+
+        # Get owner TelegramUser object
+        owner = TelegramUser.objects.filter(id=payload['owner']).first()
+
+        if owner:
+            payload['owner'] = owner
+            alias, created = self.model.objects.update_or_create(title=payload['title'], defaults=payload)
+            serialized = AccountAliasSerializer(alias)
+
+            if not created:
+                response = {'error': 1, 'msg': 'alias already active', 'data': serialized.data}
+            else:
+                response = {'error': 0, 'msg': 'alias registration success', 'data': serialized.data}
+        else:
+            response = {'error': 1, 'msg': 'Only @EpicTipBot User can create aliases.', 'data': None}
+
+        return JsonResponse(response)
+
+
 def send_transaction(request):
     """
     End-point for POST request with TelegramUser and Transaction data to send
@@ -81,18 +122,17 @@ def send_transaction(request):
     data = json.loads(request.body)
     sender = TelegramUser.objects.filter(id=data['sender']['id']).first()
     sender_wallet = sender.wallet.first()
-    # logger.critical(f"\n tipbot::send_transaction() - payload from user: {data}")
 
     # Prevent accidental multiple transactions
     if sender.locked:
-        response = {'error': 1, 'msg': f"Too many transactions, please wait couple seconds.", 'data': None}
-        logger.error(f"[{data['sender']}]: {response['msg']}")
+        response = {'error': 1, 'msg': f"Too many transactions, please wait 5 seconds.", 'data': None}
+        # logger.error(f"[{data['sender']}]: {response['msg']}")
         return JsonResponse(response)
 
     # If something is wrong with the amount
     if not data['amount']:
         response = {'error': 1, 'msg': f"invalid amount", 'data': None}
-        logger.error(f"[{sender}]: {response['msg']}")
+        # logger.error(f"[{sender}]: {response['msg']}")
         return JsonResponse(response)
 
     tx_params = {
@@ -109,8 +149,11 @@ def send_transaction(request):
 
     # Handle send transaction (TipBotUser as receiver)
     elif 'send' in data['type_of'] or 'tip' in data['type_of']:
-        receiver = TelegramUser.objects.filter(id=data['receiver']['id']).first()
-        tx_params.update({'receiver': receiver.wallet.first()})
+        if 'address' in data['receiver'].keys():
+            tx_params.update({'address': data['receiver']['address']})
+        else:
+            receiver = TelegramUser.objects.filter(id=data['receiver']['id']).first()
+            tx_params.update({'receiver': receiver.wallet.first()})
 
     # Create and save Transaction to database
     tx = Transaction.objects.create(**tx_params)
@@ -147,7 +190,6 @@ def send_transaction(request):
         logger.error(f"tipbot::views::send_transaction() - {response['msg']}")
 
     return JsonResponse(response)
-#
 
 
 def get_address(request):
@@ -173,7 +215,7 @@ def update(request):
     data to receive wallet pendingTransactions
     """
     payload = json.loads(request.body)
-    logger.info(f"tipbot::views::get_update_balance() - {payload}")
+    logger.info(f"tipbot::views::get_update_balance({payload})")
 
     wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
                                    Q(address=payload['address'])).first()
@@ -181,7 +223,7 @@ def update(request):
 
     if not wallet: return JsonResponse(response)
 
-    # Set timeout to get 10sec for each pending tx to avoid pre-time failures
+    # Set timeout to get 10sec for each pending tx to avoid timeout issues
     timeout = payload['num'] * 10
     update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
     response = {'error': 0, 'msg': 'success update', 'data': None}
@@ -199,7 +241,7 @@ def get_balance(request):
     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
 
     payload = json.loads(request.body)
-    logger.info(f"tipbot::views::get_balance() - {payload}")
+    logger.info(f"tipbot::views::get_balance({payload})")
 
     wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
                                    Q(address=payload['address'])).first()
@@ -216,3 +258,18 @@ def get_balance(request):
 
     return JsonResponse(response)
 
+
+def get_address_balance(request):
+    """
+    End-point for POST request with address
+    data to retrieve account balance from network
+    """
+    payload = json.loads(request.body)
+    logger.info(f"tipbot::views::get_address_balance({payload})")
+    response = js_handler.address_balance(payload['address'])
+
+    if response['error']: return JsonResponse(response)
+
+    response['data'] = utils.readable_balance(response['data'])
+
+    return JsonResponse(response)

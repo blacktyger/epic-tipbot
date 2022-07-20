@@ -48,11 +48,6 @@ class TelegramUser(AbstractUser):
 
     @property
     def full_name(self):
-        """
-        You can get full name of user.
-
-        :return: str
-        """
         full_name = self.first_name
         if self.last_name:
             full_name += ' ' + self.last_name

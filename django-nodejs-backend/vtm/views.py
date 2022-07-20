@@ -100,7 +100,7 @@ class CreateTelegramUserView(CreateView):
 
         if exists:
             logger.info(f"[{user.mention}]: users/create (already exists)")
-            response = {'error': 1, 'msg': 'account already active', 'data': serialized.data}
+            response = {'error': 0, 'msg': 'account already active', 'data': serialized.data}
         else:
             vite_wallet = utils.create_vite_wallet(user)
             logger.info(f"[{user.mention}]: users/create (new)")

@@ -2,4 +2,4 @@ from django.contrib import admin
 from .models import *
 
 
-admin.site.register((Wallet, Transaction, ))
+admin.site.register((Wallet, Transaction, AccountAlias))

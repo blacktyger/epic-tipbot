@@ -19,9 +19,42 @@ COMMANDS = COMMANDS
 PRICE = MarketData()
 
 
+# /------ CREATE ACCOUNT ALIAS HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['new_alias'])
+async def create_account_alias(message: types.Message):
+    if len(message.text.split(' ')) > 2 and \
+        message.text.split(' ')[1].startswith('#'):
+
+        alias_title, address = message.text.split(' ')[1:3]
+        owner = TipBotUser.from_obj(message.from_user)
+        alias = AliasWallet(title=alias_title, address=address, owner=owner)
+        await owner.wallet.gui.register_alias(message=message, alias=alias)
+
+
+# /------ GET ACCOUNT ALIAS DETAILS ------\ #
+@dp.message_handler(commands=COMMANDS['alias_details'])
+async def get_alias_details(message: types.Message):
+    if len(message.text.split(' ')) > 1 and message.text.split(' ')[1].startswith('#'):
+        owner = TipBotUser.from_obj(message.from_user)
+
+        if owner.wallet:
+            await owner.wallet.gui.alias_details(message=message)
+
+
+# TODO: UPDATE OR REMOVE ALIAS
+# /------ GET ACCOUNT ALIAS DETAILS ------\ #
+@dp.message_handler(commands=COMMANDS['alias_details'])
+async def get_alias_details(message: types.Message):
+    if len(message.text.split(' ')) > 1 and message.text.split(' ')[1].startswith('#'):
+        owner = TipBotUser.from_obj(message.from_user)
+
+        if owner.wallet:
+            await owner.wallet.gui.alias_details(message=message)
+
+
 # /------ CREATE ACCOUNT HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['create'])
-async def create(message: types.Message):
+async def create_account(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
     response = owner.register()
     await owner.wallet.gui.new_wallet(response)
@@ -31,7 +64,9 @@ async def create(message: types.Message):
 @dp.message_handler(commands=COMMANDS['wallet'], state='*')
 async def wallet(message: types.Message, state: FSMContext):
     owner = TipBotUser.from_obj(message.from_user)
-    await owner.wallet.gui.show(state=state)
+
+    if owner.wallet:
+        await owner.wallet.gui.show(state=state)
 
 
 # /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
