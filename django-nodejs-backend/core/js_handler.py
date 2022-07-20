@@ -24,9 +24,16 @@ def update_(**kwargs):
     mnemonics = kwargs['mnemonics']
     timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 15
 
-    p = subprocess.run(
-        ['node', 'static/src/js/api_handler.js', 'update', '-m', mnemonics, '-i', '0'],
-        capture_output=True, text=True, check=True, timeout=timeout)
+    try:
+        p = subprocess.run(
+            ['node', 'static/src/js/api_handler.js', 'update', '-m', mnemonics, '-i', '0'],
+            capture_output=True, text=True, check=True, timeout=timeout)
+
+    except subprocess.TimeoutExpired:
+        p = subprocess.run(
+            ['node', 'static/src/js/api_handler.js', 'update', '-m', mnemonics, '-i', '0'],
+            capture_output=True, text=True, check=True, timeout=timeout)
+
     return json.loads(p.stdout)
 
 
@@ -36,13 +43,22 @@ def send(**kwargs):
     address = kwargs['toAddress']
     amount = str(kwargs['amount'])
     token = kwargs['tokenId']
+    try:
+        p = subprocess.run(
+            ['node', 'static/src/js/api_handler.js',
+             'send', '-m', mnemonics, '-i', '0',
+             '-d', address, '-t', token, '-a', amount
+             ],
+            capture_output=True, text=True, check=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
 
-    p = subprocess.run(
-        ['node', 'static/src/js/api_handler.js',
-         'send', '-m', mnemonics, '-i', '0',
-         '-d', address, '-t', token, '-a', amount
-         ],
-        capture_output=True, text=True, check=True, timeout=timeout)
+        p = subprocess.run(
+            ['node', 'static/src/js/api_handler.js',
+             'send', '-m', mnemonics, '-i', '0',
+             '-d', address, '-t', token, '-a', amount
+             ],
+            capture_output=True, text=True, check=True, timeout=timeout)
+
     return json.loads(p.stdout)
 
 
@@ -61,7 +77,7 @@ def execute_node_call(**kwargs):
     This is a dirty solution but works well :)
     """
     tries = kwargs['tries'] if 'tries' in kwargs.keys() else 5
-    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 10
+    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 15
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for i in range(tries):
@@ -71,6 +87,7 @@ def execute_node_call(**kwargs):
             a = executor.submit(eval(kwargs['func']), **kwargs)
 
             try:
+                print(a.result())
                 return a.result()
             except subprocess.TimeoutExpired:
                 continue

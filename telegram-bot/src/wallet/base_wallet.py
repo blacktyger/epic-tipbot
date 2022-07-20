@@ -27,7 +27,7 @@ class Wallet:
             timeout = 5
         else:
             if 'num' in params.keys():
-                timeout = int(params['num']) * 10
+                timeout = int(params['num']) * 20
             else:
                 timeout = 10
 
