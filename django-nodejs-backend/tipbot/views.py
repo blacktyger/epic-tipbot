@@ -63,7 +63,7 @@ class AccountAliasView(viewsets.ModelViewSet):
             queryset = queryset.filter(address=address)
 
         if title:
-            queryset = queryset.filter(title=title)
+            queryset = queryset.filter(title__iexact=title)
 
         return queryset
 
