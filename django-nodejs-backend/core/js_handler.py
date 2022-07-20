@@ -12,6 +12,14 @@ def balance(**kwargs):
     return json.loads(p.stdout)
 
 
+def address_balance(address, **kwargs):
+    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 5
+    p = subprocess.run(
+        ['node', 'static/src/js/api_handler.js', 'addressBalance', '-a', address],
+        capture_output=True, text=True, check=True, timeout=timeout)
+    return json.loads(p.stdout)
+
+
 def update_(**kwargs):
     mnemonics = kwargs['mnemonics']
     timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 15
@@ -53,11 +61,12 @@ def execute_node_call(**kwargs):
     This is a dirty solution but works well :)
     """
     tries = kwargs['tries'] if 'tries' in kwargs.keys() else 5
+    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 15
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for i in range(tries):
             if i > 0:
-                kwargs['timeout'] += i / 2
+                timeout += i / 2
 
             a = executor.submit(eval(kwargs['func']), **kwargs)
 
