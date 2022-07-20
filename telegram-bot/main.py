@@ -21,7 +21,6 @@ PRICE = MarketData()
 
 # /------ CREATE ACCOUNT ALIAS HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['new_alias'])
-@dp.message_handler(lambda message: int(message.from_user.id) == int(Tipbot.ADMIN_ID))
 async def create_account_alias(message: types.Message):
     if len(message.text.split(' ')) > 2 and \
         message.text.split(' ')[1].startswith('#'):
