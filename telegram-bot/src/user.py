@@ -153,7 +153,7 @@ class TipBotUser(User):
 
     def get_url(self):
         """Prepare name and link to profile shown in messages"""
-        return self.get_mention().replace('\\', '')
+        return self.get_mention()
 
     @classmethod
     def get_user(cls, key_word):
