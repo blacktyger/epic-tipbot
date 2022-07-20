@@ -24,12 +24,12 @@ class Wallet:
 
         # Calculate connection timeout depends on type of query
         if method == 'get':
-            timeout = 5
+            timeout = 20
         else:
             if 'num' in params.keys():
-                timeout = int(params['num']) * 20
+                timeout = int(params['num']) * 30
             else:
-                timeout = 10
+                timeout = 30
 
         return tools.api_call(query, api_url, params, method, timeout)
 
