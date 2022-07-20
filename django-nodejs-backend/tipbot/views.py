@@ -224,8 +224,8 @@ def update(request):
     if not wallet: return JsonResponse(response)
 
     # Set timeout to get 10sec for each pending tx to avoid timeout issues
-    timeout = payload['num'] * 10
-    update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
+    timeout = payload['num'] * 20
+    execute_node_call(func='update_', mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
     response = {'error': 0, 'msg': 'success update', 'data': None}
 
     # if '[object Object]' in response['msg']:
