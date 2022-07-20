@@ -452,7 +452,7 @@ class WalletGUI:
             logger.error(f"main::create_account_alias() -> {str(e)}")
             msg = f"🟡 New alias registration failed."
 
-        await self.send_message(text=msg, chat_id=message.chat.id)
+        await bot.send_message(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.MARKDOWN)
 
     async def alias_details(self, message: types.Message):
         # Parse user text and prepare params
