@@ -19,6 +19,15 @@ COMMANDS = COMMANDS
 PRICE = MarketData()
 
 
+if Tipbot.MAINTENANCE:
+    # /------ MAINTENANCE HANDLE ------\ #
+    @dp.message_handler(lambda message: message.text.startswith(('tip', 'Tip')))
+    @dp.message_handler(commands=['details, tip', 'Tip', 'start', 'help', 'faq', 'wallet'])
+    async def maintenance(message: types.Message):
+        owner = TipBotUser.from_obj(message.from_user)
+        await owner.wallet.gui.maintenance(message)
+
+
 # /------ CREATE ACCOUNT ALIAS HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['new_alias'])
 async def create_account_alias(message: types.Message):
@@ -67,6 +76,15 @@ async def wallet(message: types.Message, state: FSMContext):
 
     if owner.wallet:
         await owner.wallet.gui.show(state=state)
+
+
+#TODO: TEST  /------ WALLET GUI UPDATE ------\ #
+@dp.message_handler(commands=['update_balance'], state='*')
+async def wallet(message: types.Message, state: FSMContext):
+    owner = TipBotUser.from_obj(message.from_user)
+
+    if owner.wallet:
+        owner.wallet.update_balance()
 
 
 # /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #

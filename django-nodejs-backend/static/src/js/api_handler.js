@@ -155,14 +155,14 @@ async function update(mnemonics, address_id) {
             } else { newTransactions += 1}
         });
 
-        // // Handle error responses
-        // task.onError((error) => {logAndExit(1, error)});
+        // Handle error responses
+        task.onError((error) => {logAndExit(1, error)});
 
         // Start ReceiveTask and close when all 
         // unreceived transactions are processed
         task.start({
             checkTime: 1000,
-            transctionNumber: 100
+            transctionNumber: 10
         });
 
     } catch (error) {logAndExit(1, error)}

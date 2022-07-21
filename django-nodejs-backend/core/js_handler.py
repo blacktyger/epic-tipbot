@@ -5,15 +5,26 @@ import json
 
 def balance(**kwargs):
     mnemonics = kwargs['mnemonics']
-    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 5
-    p = subprocess.run(
-        ['node', 'static/src/js/api_handler.js', 'balance', '-m', mnemonics, '-i', '0'],
-        capture_output=True, text=True, check=True, timeout=timeout)
-    return json.loads(p.stdout)
+    response = None
+    timeout = 10
+    tries = 3
 
+    while tries:
+        print(f"{tries} LEFT")
+        try:
+            response = subprocess.run(
+                ['node', 'static/src/js/api_handler.js', 'balance', '-m', mnemonics, '-i', '0'],
+                capture_output=True, text=True, check=True, timeout=timeout)
+            tries -= 1
+        except subprocess.TimeoutExpired:
+            tries -= 1
+            continue
+
+    if response: return json.loads(response.stdout)
+    else: return
 
 def address_balance(address, **kwargs):
-    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 10
+    timeout = 20
     p = subprocess.run(
         ['node', 'static/src/js/api_handler.js', 'addressBalance', '-a', address],
         capture_output=True, text=True, check=True, timeout=timeout)
@@ -22,24 +33,28 @@ def address_balance(address, **kwargs):
 
 def update_(**kwargs):
     mnemonics = kwargs['mnemonics']
-    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 30
+    response = None
+    timeout = 10
+    tries = 3
 
-    try:
-        p = subprocess.run(
-            ['node', 'static/src/js/api_handler.js', 'update', '-m', mnemonics, '-i', '0'],
-            capture_output=True, text=True, check=True, timeout=timeout)
+    while tries:
+        print(f"{tries} LEFT")
+        try:
+            response = subprocess.run(
+                ['node', 'static/src/js/api_handler.js', 'update', '-m', mnemonics, '-i', '0'],
+                capture_output=True, text=True, check=True, timeout=timeout)
+            tries -= 1
+        except subprocess.TimeoutExpired:
+            tries -= 1
+            continue
 
-    except subprocess.TimeoutExpired:
-        p = subprocess.run(
-            ['node', 'static/src/js/api_handler.js', 'update', '-m', mnemonics, '-i', '0'],
-            capture_output=True, text=True, check=True, timeout=timeout)
-
-    return json.loads(p.stdout)
+    if response: return json.loads(response.stdout)
+    else: return
 
 
 def send(**kwargs):
     mnemonics = kwargs['mnemonics']
-    timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 30
+    timeout = 90
     address = kwargs['toAddress']
     amount = str(kwargs['amount'])
     token = kwargs['tokenId']
@@ -76,18 +91,18 @@ def execute_node_call(**kwargs):
     until we get a response. Successful attempt will return response and break a loop.
     This is a dirty solution but works well :)
     """
-    tries = kwargs['tries'] if 'tries' in kwargs.keys() else 10
+    tries = kwargs['tries'] if 'tries' in kwargs.keys() else 3
     timeout = kwargs['timeout'] if 'timeout' in kwargs.keys() else 20
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        for i in range(tries):
-            if i > 0:
-                timeout += i / 2
-
-            a = executor.submit(eval(kwargs['func']), **kwargs)
-
-            try:
-                print(a.result())
-                return a.result()
-            except subprocess.TimeoutExpired:
-                continue
+    # with concurrent.futures.ThreadPoolExecutor() as executor:
+    #     for i in range(tries):
+    #         if i > 0:
+    #             timeout += i / 2
+    #
+    #         a = executor.submit(eval(kwargs['func']), **kwargs)
+    #
+    #         try:
+    #             print(a.result())
+    #             return a.result()
+    #         except subprocess.TimeoutExpired:
+    #             continue

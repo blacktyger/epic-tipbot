@@ -22,16 +22,7 @@ class Wallet:
         if not api_url:
             api_url = self.API_URL1
 
-        # Calculate connection timeout depends on type of query
-        if method == 'get':
-            timeout = 20
-        else:
-            if 'num' in params.keys():
-                timeout = int(params['num']) * 30
-            else:
-                timeout = 30
-
-        return tools.api_call(query, api_url, params, method, timeout)
+        return tools.api_call(query, api_url, params, method)
 
     def _update_from_db(self):
         pass

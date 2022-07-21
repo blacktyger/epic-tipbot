@@ -85,6 +85,7 @@ class Tests:
 
 
 class Tipbot:
+    MAINTENANCE = True
     MAX_RECEIVERS = 5
     TIME_LOCK = 2.2
     ADMIN_ID = '803516752'

@@ -39,7 +39,7 @@ def is_int(value):
         return None
 
 
-def api_call(query: str, url: str, params: dict, method='get', timeout=20) -> dict:
+def api_call(query: str, url: str, params: dict, method='get') -> dict:
     """ Handle API calls to Django back-end database
     :param timeout: int
     :param query: str
@@ -52,9 +52,9 @@ def api_call(query: str, url: str, params: dict, method='get', timeout=20) -> di
     full_url = f'{url}/{query}/'
     try:
         if 'get' in method:
-            response = requests.get(url=full_url, params=params, timeout=timeout)
+            response = requests.get(url=full_url, params=params)
         else:  # 'post' in method
-            response = requests.post(url=full_url, data=json.dumps(params), timeout=timeout)
+            response = requests.post(url=full_url, data=json.dumps(params))
 
         if response.status_code != 200:
             logger.error(f'{full_url} | {response.status_code}')

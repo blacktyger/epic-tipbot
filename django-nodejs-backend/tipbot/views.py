@@ -6,7 +6,6 @@ from django.db.models import Q
 import json
 
 from .serializers import WalletSerializer, TransactionSerializer, AccountAliasSerializer
-from core.js_handler import execute_node_call, send, update_
 from vtm.models import Token, TelegramUser
 from .models import Wallet, Transaction, AccountAlias
 from core.logger_ import setup_logging
@@ -165,7 +164,7 @@ def send_transaction(request):
         'tokenId': tx.token.id,
         'amount': tx.prepare_amount()
         }
-    transaction = send(**tx_params)
+    transaction = js_handler.send(**tx_params)
 
     # Update tx status and network transaction data:
     # if success save tx hash, else error msg.
@@ -225,7 +224,7 @@ def update(request):
 
     # Set timeout to get 10sec for each pending tx to avoid timeout issues
     timeout = payload['num'] * 20
-    execute_node_call(func='update_', mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
+    js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
     response = {'error': 0, 'msg': 'success update', 'data': None}
 
     # if '[object Object]' in response['msg']:
@@ -248,7 +247,7 @@ def get_balance(request):
 
     if not wallet: return JsonResponse(response)
 
-    balance = execute_node_call(func='balance', mnemonics=wallet.decrypt_mnemonics())
+    balance = js_handler.balance(mnemonics=wallet.decrypt_mnemonics())
 
     if balance['error']: return JsonResponse(balance)
 

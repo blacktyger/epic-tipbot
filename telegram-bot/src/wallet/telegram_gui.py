@@ -581,6 +581,15 @@ class WalletGUI:
         await self.send_message(text=public_msg, chat_id=active_chat)
         logger.info(f"{params['sender'].mention}: tipped {amount} to {params['receivers']}")
 
+    async def maintenance(self, message):
+        msg = f"⚙️ ⚠️ @EpicTipBot is under a maintenance, you will get notice via DM when " \
+              f"bot will be back online, apologies for inconvenience."
+        await bot.send_message(text=msg, disable_web_page_preview=True,
+                               reply_markup=self.confirm_failed_tip_keyboard(),
+                               parse_mode=ParseMode.HTML, chat_id=message.chat.id)
+
+        self.auto_delete(message, 20)
+
     def auto_delete(self, message, delta):
         """Add job to scheduler with time in seconds from now to run the task"""
         date = datetime.now() + timedelta(seconds=delta)
