@@ -5,8 +5,8 @@ import threading
 import decimal
 import time
 
-from .base_wallet import Wallet
 from .. import tools, logger, Tipbot, bot, settings
+from .base_wallet import Wallet
 
 
 class ViteWallet(Wallet):

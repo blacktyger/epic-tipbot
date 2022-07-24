@@ -78,15 +78,6 @@ async def wallet(message: types.Message, state: FSMContext):
         await owner.wallet.gui.show(state=state)
 
 
-#TODO: TEST  /------ WALLET GUI UPDATE ------\ #
-@dp.message_handler(commands=['update_balance'], state='*')
-async def wallet(message: types.Message, state: FSMContext):
-    owner = TipBotUser.from_obj(message.from_user)
-
-    if owner.wallet:
-        owner.wallet.update_balance()
-
-
 # /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
 @dp.callback_query_handler(wallet_cb.filter(action='deposit'), state='*')
 async def gui_deposit(query: types.CallbackQuery, callback_data: dict):
@@ -212,6 +203,14 @@ async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
 
 
 """=================================================="""
+
+# TODO: TEST  /------ WALLET GUI UPDATE ------\ #
+@dp.message_handler(commands=['update_balance'], state='*')
+async def wallet(message: types.Message, state: FSMContext):
+    owner = TipBotUser.from_obj(message.from_user)
+
+    if owner.wallet:
+        owner.wallet.update_balance()
 
 
 # TODO:  /------ TESTING MENTIONS ------\ #

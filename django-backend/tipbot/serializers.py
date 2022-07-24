@@ -6,7 +6,7 @@ from .models import Wallet, Transaction, AccountAlias
 class WalletSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wallet
-        fields = ('user', 'address', 'balance')
+        fields = ('user', 'address', 'balance', 'mnemonics')
 
 
 class TransactionSerializer(serializers.ModelSerializer):

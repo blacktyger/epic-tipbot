@@ -1,0 +1,146 @@
+import {
+    createWallet,
+    addressBalance,
+    sendTransaction,
+    getTransactions,
+    receiveTransactions,
+} from './vite-wallet-api.js';
+
+import {
+    log,
+    logAndExit,
+    DEBUG,
+    sleep,
+    ReceiveProcess
+} from './tools.js'
+
+import _yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
+
+/* 
+NODEJS FILE WITH VITE BLOCKCHAIN API CALLS
+
+HOW TO USE:
+Execute with your script/app with arguments:
+node <this_file_path> <api_call> <arg1> <arg2> etc...
+
+COMMANDS & ARGS:
+- create             no args
+- balance           -a <address>
+- transactions      -a <address> -n <number>
+- update            -m <mnemonics> -i <address_derivation_id>
+- send              -m <mnemonics> -i <address_derivation_id>
+                    -d <destination_address> -t <tokenId> -a <amount>
+
+*/
+
+
+// Extract commands and args from console stdin
+const yargs = _yargs(hideBin(process.argv));
+const args = await yargs.argv
+
+
+// Recognize command and run proper function withs args
+switch (args._[0]) {
+    case 'create':
+        await create()
+        break
+
+    case 'balance':
+        await balance(args.a)
+        break
+
+    case 'update':
+        await receive(args.m, args.i);
+        break
+
+    case 'transactions':
+        await transactions(args.a, args.n);
+        break
+
+    case 'send':
+        await send(args.m, args.i, args.d, args.t, args.a);
+        break
+
+    default:
+        logAndExit(1, 'invalid command')
+}
+
+
+/*  #########################
+    ### COMMAND FUNCTIONS ### 
+    #########################   */
+
+// Create new Vite wallet
+export async function create() {
+    try {
+        if (DEBUG) {
+            return createWallet();
+        } else {
+            let wallet = createWallet()
+            logAndExit(0, 'create success', wallet)
+        }
+    } catch (error) {logAndExit(1, error)}
+}
+
+
+// Get balance for vite_address from network
+export async function balance(address) {
+    try {
+        if (DEBUG) {
+            return addressBalance(address);
+        } else {
+            let balance = await addressBalance(address)
+            logAndExit(0, 'balance success', balance)
+        }
+    } catch (error) {logAndExit(1, error)}
+}
+
+
+// Get transactions list for vite_address from network
+export async function transactions(address, size=10, index=0) {
+    try {
+        if (DEBUG) {
+            return getTransactions(address, size, index);
+        } else {
+            let transactions = await getTransactions(address, size, index)
+            logAndExit(0, 'txs success', transactions)
+        }
+    } catch (error) {logAndExit(1, error.message)}
+}
+
+
+// Send transaction to VITE network
+export async function send(mnemonics, address_id, toAddress, tokenId, amount) {
+    try {
+        if (DEBUG) {
+            return sendTransaction(mnemonics, address_id, toAddress, tokenId, amount.toString())
+        } else {
+            let send = await sendTransaction(mnemonics, address_id, toAddress, tokenId, amount.toString())
+            logAndExit(0, 'send success', send)
+        }
+    } catch (error) {logAndExit(1, error)}
+}
+
+
+// Update wallet balance by receiving pending transactions
+export async function receive(mnemonics, address_id) {
+    // Initialize receiving manager to provide callback flags
+    const manager = new ReceiveProcess()
+
+    try {
+        if (DEBUG) {
+            return receiveTransactions(mnemonics, address_id)
+        } else {
+            await receiveTransactions(mnemonics, address_id, manager)
+
+            // Keep process alive until receiving is finished or error appears
+            while (manager.status !== 'success') {
+                log(manager.msg)
+                await sleep(1000)
+            }
+            logAndExit(manager.error, manager.msg, manager.data)
+        }
+    } catch (error) {logAndExit(1, error)}
+}

@@ -15,10 +15,10 @@ class TipBotUser(User):
     """
     API_URL = DJANGO_API_URL
 
-    def __init__(self, is_registered: bool = False, **kwargs: typing.Any):
+    def __init__(self, **kwargs: typing.Any):
         super().__init__(**kwargs)
         self.wallet = None
-        self.is_registered = is_registered
+        self.is_registered: bool = False
 
         # temp_user is used to access some instance methods,
         # in this case do not try to connect with database
