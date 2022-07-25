@@ -1,13 +1,12 @@
 import {
+    getBalance,
     createWallet,
-    addressBalance,
     sendTransaction,
     getTransactions,
     receiveTransactions,
 } from './vite-wallet-api.js';
 
 import {
-    log,
     logAndExit,
     DEBUG,
     sleep,
@@ -22,13 +21,13 @@ import { hideBin } from 'yargs/helpers';
 NODEJS FILE WITH VITE BLOCKCHAIN API CALLS
 
 HOW TO USE:
-Execute with your script/app with arguments:
-node <this_file_path> <api_call> <arg1> <arg2> etc...
+Execute in your script/app with arguments:
+node <this_file_path> <command> <arg1> <arg2> etc...
 
 COMMANDS & ARGS:
 - create             no args
-- balance           -a <address>
-- transactions      -a <address> -n <number>
+- balance           -a <address> |or| -m <mnemonics> -i <address_derivation_id>
+- transactions      -a <address> -n <number_of_transactions>
 - update            -m <mnemonics> -i <address_derivation_id>
 - send              -m <mnemonics> -i <address_derivation_id>
                     -d <destination_address> -t <tokenId> -a <amount>
@@ -48,7 +47,7 @@ switch (args._[0]) {
         break
 
     case 'balance':
-        await balance(args.a)
+        await balance(args.a, args.m, args.i)
         break
 
     case 'update':
@@ -86,12 +85,12 @@ export async function create() {
 
 
 // Get balance for vite_address from network
-export async function balance(address) {
+export async function balance(address, mnemonics, address_id) {
     try {
         if (DEBUG) {
-            return addressBalance(address);
+            return getBalance(address, mnemonics, address_id);
         } else {
-            let balance = await addressBalance(address)
+            let balance = await getBalance(address, mnemonics, address_id, 800)
             logAndExit(0, 'balance success', balance)
         }
     } catch (error) {logAndExit(1, error)}
@@ -112,13 +111,14 @@ export async function transactions(address, size=10, index=0) {
 
 
 // Send transaction to VITE network
-export async function send(mnemonics, address_id, toAddress, tokenId, amount) {
+export async function send(mnemonics, address_id, toAddress, tokenId, amount, timeout=5000) {
     try {
         if (DEBUG) {
-            return sendTransaction(mnemonics, address_id, toAddress, tokenId, amount.toString())
+            return sendTransaction(mnemonics, address_id, toAddress, tokenId, amount.toString(), timeout)
         } else {
-            let send = await sendTransaction(mnemonics, address_id, toAddress, tokenId, amount.toString())
-            logAndExit(0, 'send success', send)
+            let send = await sendTransaction(mnemonics, address_id,
+                toAddress, tokenId, amount.toString(), timeout)
+            logAndExit(0, 'transaction success', send)
         }
     } catch (error) {logAndExit(1, error)}
 }
@@ -133,11 +133,11 @@ export async function receive(mnemonics, address_id) {
         if (DEBUG) {
             return receiveTransactions(mnemonics, address_id)
         } else {
-            await receiveTransactions(mnemonics, address_id, manager)
+            await receiveTransactions(mnemonics, address_id, manager, 1000)
 
             // Keep process alive until receiving is finished or error appears
             while (manager.status !== 'success') {
-                log(manager.msg)
+                console.log(">> " + manager.msg)
                 await sleep(1000)
             }
             logAndExit(manager.error, manager.msg, manager.data)

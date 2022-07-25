@@ -1,6 +1,6 @@
 import vitejs_pkg from '@vite/vitejs';
 import {connect} from './provider.js'
-import {log, withTimeout} from './tools.js'
+import {log, method, withTimeout} from './tools.js'
 
 const { utils, accountBlock, wallet } = vitejs_pkg;
 const { ReceiveAccountBlockTask } = accountBlock;
@@ -8,7 +8,7 @@ const { ReceiveAccountBlockTask } = accountBlock;
 export {
     createWallet, getTransactions,
     receiveTransactions, sendTransaction,
-    addressBalance
+    getBalance
 }
 
 // --- CREATE WALLET ---\\
@@ -22,20 +22,30 @@ function createWallet() {
 
 // --- GET ADDRESS BALANCE --- \\
 // :return: Wallet balance and unreceived blocks
-async function addressBalance(address) {
-    const provider = connect('wss')
-
+async function getBalance(address, mnemonics, address_id=0, timeout=1000) {
+    const provider = connect(method, timeout)
     // Handle error with VITE node
     if (!provider) { throw "ERROR Connection to VITE NODE" }
 
-    return provider.getBalanceInfo(address)
+    // If address provided return its balance
+    if (address) {
+        // console.log(">> getting balance for " + address)
+        return provider.getBalanceInfo(address)
+    }
+
+    // If mnemonics provided, get Wallet from network and use its address
+    else if (mnemonics) {
+        let wallet_ = wallet.getWallet(mnemonics).deriveAddress(address_id)
+        // console.log(">> getting balance for " + wallet_.address)
+        return provider.getBalanceInfo(wallet_.address)
+    }
 }
 
 
 // --- GET TRANSACTION LIST --- \\
 // :return: transactions array
 async function getTransactions(address) {
-    const provider = connect('wss')
+    const provider = connect(method)
 
     // Handle error with VITE node
     if (!provider) { throw "ERROR Connection to VITE NODE" }
@@ -46,13 +56,13 @@ async function getTransactions(address) {
 
 // --- UPDATE BALANCE / RECEIVE TRANSACTIONS --- \\
 // :return: None
-async function receiveTransactions(mnemonics, address_id, callback={}) {
+async function receiveTransactions(mnemonics, address_id, callback={}, timeout) {
     let unreceivedBlocks = []
     let successBlocks = []
     let errorBlocks = []
 
     // Set provider (VITE node handler)
-    const provider = connect('wss', 3000)
+    const provider = connect(method, timeout)
 
     // Handle error with VITE node
     if (!provider) { throw "ERROR Connection to VITE NODE" }
@@ -69,9 +79,9 @@ async function receiveTransactions(mnemonics, address_id, callback={}) {
     });
 
     // Check for unreceived transactions for account
-    callback.status = 'checking balance..'
+    callback.msg = 'checking balance..'
     log(`Checking balance for ${address}`)
-    const {balance, unreceived} = await withTimeout(addressBalance, [address], 2000)
+    const {balance, unreceived} = await withTimeout(getBalance, [address], 2000)
 
     if (balance) {  // means if addressBalance call was success
         // Parse number of unreceivedTransactions to int
@@ -80,15 +90,15 @@ async function receiveTransactions(mnemonics, address_id, callback={}) {
         // Initialize ReceiveTransaction subscription task if needed
         if (callback.unreceived) {
             log(`Start Receiving ${callback.unreceived} Transactions`)
-            callback.status = 'receiving transactions..'
+            callback.msg = 'start receiving task..'
             ReceiveTask.start({
                 checkTime: 2545,
                 transctionNumber: callback.unreceived
             });
         } else {
-            callback.msg = `No pending transactions`
+            callback.msg = `no pending transactions`
             callback.error = 1
-            callback.status = "failed"
+            callback.status = "success"
             throw Error("No pending transactions")
         }
 
@@ -99,7 +109,7 @@ async function receiveTransactions(mnemonics, address_id, callback={}) {
             if (result.message.includes("Don't have")) {
                 // Handle last unreceived transaction and finish task
                 let data = {unreceived: callback.unreceived, success: successBlocks, error: errorBlocks}
-                callback.msg = "finished " + callback.unreceived + " unreceived blocks"
+                callback.msg = callback.unreceived + " blocks received success"
                 callback.data = data
                 callback.status = 'success'
                 ReceiveTask.stop();
@@ -107,8 +117,9 @@ async function receiveTransactions(mnemonics, address_id, callback={}) {
 
             } else {
                 // Update callback status and keep receiving
-                callback.msg = "transaction " + (unreceivedBlocks.length + 1) + "/" + callback.unreceived
-                log(`${unreceivedBlocks.length + 1} / ${callback.unreceived}`, result.message)
+                // callback.msg = "working on transaction " + (unreceivedBlocks.length + 1)
+                //     + "/" + callback.unreceived + '..'
+                callback.msg = `>> ${unreceivedBlocks.length + 1} / ${callback.unreceived} ${result.message}`
                 unreceivedBlocks.push(result.message)
                 successBlocks.push(result.message)
             }
@@ -125,7 +136,7 @@ async function receiveTransactions(mnemonics, address_id, callback={}) {
 
     } else {
         // Handle custom timeout case
-        callback.msg = `Connection timeout`
+        callback.msg = `connection timeout`
         callback.error = 1
         callback.status = "failed"
         throw Error("Connection timeout")
@@ -135,9 +146,10 @@ async function receiveTransactions(mnemonics, address_id, callback={}) {
 
 // --- SEND TRANSACTION --- \\
 // :return: error or transaction data in JSON
-async function sendTransaction(mnemonics, address_id, toAddress, tokenId, amount) {
+async function sendTransaction(mnemonics, address_id, toAddress, tokenId, amount, timeout=2000) {
     // Connect to provider (VITE node handler)
-    const provider = connect('wss', 2000)
+    const provider = connect(method, timeout)
+    console.log(">> sending " + (parseInt(amount) / 10**8 )+ " to: " + toAddress)
 
     // Handle error with VITE node
     if (!provider) { throw "ERROR Connection to VITE NODE" }
@@ -184,7 +196,9 @@ async function sendTransaction(mnemonics, address_id, toAddress, tokenId, amount
     }
 
     // 6. Sign and send the AccountBlock
-    return sendBlock.sign().send().catch(e => {throw e.message});
+    return sendBlock.sign().send().then(() => {
+        console.log(">> sending " + (parseInt(amount) / 10**8 ) + " completed")
+    }).catch(e => {throw e.message});
 }
 
 

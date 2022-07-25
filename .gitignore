@@ -6,35 +6,32 @@
 .gitignore
 /.pytest_cache/
 
-/django-backend/package-lock.json
 /django-backend/node_modules/
-/django-backend/static/src/js/node_modules/
-/django-backend/static/src/js/package-lock.json
-/django-backend/static/src/js/test_send.js
-/django-backend/static/src/js/vite-api-server.js
-/django-backend/static/src/js/send.js
-/django-backend/static/src/js/notepad.js
+/django-backend/db.sqlite3
 
 /django-backend/core/secrets.py
 /django-backend/core/__pycache__/
+
 /django-backend/tipbot/migrations/
+/django-backend/tipbot/tests.py
 /django-backend/tipbot/__pycache__/
+
 /django-backend/vtm/migrations/
 /django-backend/vtm/tests.py
 /django-backend/vtm/__pycache__/
-/django-backend/db.sqlite3
 
 /telegram-bot/main.log
 /telegram-bot/test.log
 /telegram-bot/test.py
 /telegram-bot/__pycache__/
+/telegram-bot/tests/
 /telegram-bot/src/__pycache__/
 /telegram-bot/src/wallet/__pycache__/
-/telegram-bot/tipbot_storage.pickle
 /telegram-bot/src/keys.py
 /telegram-bot/src/inline_beta.py
-/telegram-bot/tests/
+/telegram-bot/tipbot_storage.pickle
 
 /vite-nodejs/node_modules/
 /vite-nodejs/tests/
 /vite-nodejs/package-lock.json
+/telegram-bot/src/connectors/sensitive.py

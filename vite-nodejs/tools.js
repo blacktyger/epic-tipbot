@@ -1,4 +1,5 @@
 export const DEBUG = false
+export const method = 'http'
 
 // --- Wrap function with timer and return either
 // --- success function response before timout or null

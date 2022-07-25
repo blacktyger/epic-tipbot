@@ -16,7 +16,6 @@ dp = Dispatcher(bot, storage=tools.temp_storage())
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
 COMMANDS = COMMANDS
-PRICE = MarketData()
 
 
 if Tipbot.MAINTENANCE:
