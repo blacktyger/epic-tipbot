@@ -10,7 +10,8 @@
 /django-backend/db.sqlite3
 
 /django-backend/core/secrets.py
-/django-backend/core/__pycache__/
+/django-backend/core/__pycache__/*
+/django-backend/__pycache__/manage.cpython-310.pyc
 
 /django-backend/tipbot/migrations/
 /django-backend/tipbot/tests.py
@@ -29,6 +30,7 @@
 /telegram-bot/src/wallet/__pycache__/
 /telegram-bot/src/keys.py
 /telegram-bot/src/inline_beta.py
+telegram-bot/src/connectors/__pycache__/*
 /telegram-bot/tipbot_storage.pickle
 
 /vite-nodejs/node_modules/
