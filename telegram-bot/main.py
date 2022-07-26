@@ -27,39 +27,6 @@ if Tipbot.MAINTENANCE:
         await owner.wallet.gui.maintenance(message)
 
 
-# /------ CREATE ACCOUNT ALIAS HANDLE ------\ #
-@dp.message_handler(commands=COMMANDS['new_alias'])
-async def create_account_alias(message: types.Message):
-    if len(message.text.split(' ')) > 2 and \
-        message.text.split(' ')[1].startswith('#'):
-
-        alias_title, address = message.text.split(' ')[1:3]
-        owner = TipBotUser.from_obj(message.from_user)
-        alias = AliasWallet(title=alias_title, address=address, owner=owner)
-        await owner.wallet.gui.register_alias(message=message, alias=alias)
-
-
-# /------ GET ACCOUNT ALIAS DETAILS ------\ #
-@dp.message_handler(commands=COMMANDS['alias_details'])
-async def get_alias_details(message: types.Message):
-    if len(message.text.split(' ')) > 1 and message.text.split(' ')[1].startswith('#'):
-        owner = TipBotUser.from_obj(message.from_user)
-
-        if owner.wallet:
-            await owner.wallet.gui.alias_details(message=message)
-
-
-# TODO: UPDATE OR REMOVE ALIAS
-# /------ GET ACCOUNT ALIAS DETAILS ------\ #
-@dp.message_handler(commands=COMMANDS['alias_details'])
-async def get_alias_details(message: types.Message):
-    if len(message.text.split(' ')) > 1 and message.text.split(' ')[1].startswith('#'):
-        owner = TipBotUser.from_obj(message.from_user)
-
-        if owner.wallet:
-            await owner.wallet.gui.alias_details(message=message)
-
-
 # /------ CREATE ACCOUNT HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['create'])
 async def create_account(message: types.Message):
@@ -199,6 +166,39 @@ async def confirm_failed_tip(query: types.CallbackQuery, callback_data: dict, st
 async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.from_user.id)
     await owner.wallet.gui.cancel_state(state=state, query=query)
+
+
+# /------ CREATE ACCOUNT ALIAS HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['new_alias'])
+async def create_account_alias(message: types.Message):
+    if len(message.text.split(' ')) > 2 and \
+        message.text.split(' ')[1].startswith('#'):
+
+        alias_title, address = message.text.split(' ')[1:3]
+        owner = TipBotUser.from_obj(message.from_user)
+        alias = AliasWallet(title=alias_title, address=address, owner=owner)
+        await owner.wallet.gui.register_alias(message=message, alias=alias)
+
+
+# /------ GET ACCOUNT ALIAS DETAILS ------\ #
+@dp.message_handler(commands=COMMANDS['alias_details'])
+async def get_alias_details(message: types.Message):
+    if len(message.text.split(' ')) > 1 and message.text.split(' ')[1].startswith('#'):
+        owner = TipBotUser.from_obj(message.from_user)
+
+        if owner.wallet:
+            await owner.wallet.gui.alias_details(message=message)
+
+
+# TODO: UPDATE OR REMOVE ALIAS
+# /------ GET ACCOUNT ALIAS DETAILS ------\ #
+@dp.message_handler(commands=COMMANDS['alias_details'])
+async def get_alias_details(message: types.Message):
+    if len(message.text.split(' ')) > 1 and message.text.split(' ')[1].startswith('#'):
+        owner = TipBotUser.from_obj(message.from_user)
+
+        if owner.wallet:
+            await owner.wallet.gui.alias_details(message=message)
 
 
 """=================================================="""

@@ -191,84 +191,84 @@ def send_transaction(request):
     return JsonResponse(response)
 
 
-def get_address(request):
-    """
-        End-point for POST request with TelegramUser
-        data to retrieve wallet address
-        """
-    response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
-
-    user = json.loads(request.body)
-    wallet = Wallet.objects.filter(user__id=user['id']).first()
-
-    if wallet:
-        response = {'error': 0, 'msg': f'[{wallet}] success _get_address_ call', 'data': wallet.address}
-        logger.info(f"[{wallet.user}]: {response['msg']}")
-
-    return JsonResponse(response)
-
-
-def update(request):
-    """
-    End-point for POST request with TelegramUser
-    data to receive wallet pendingTransactions
-    """
-    payload = json.loads(request.body)
-    logger.info(f"tipbot::views::get_update_balance({payload})")
-
-    wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
-                                   Q(address=payload['address'])).first()
-    response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
-
-    if not wallet: return JsonResponse(response)
-
-    # Set timeout to get 10sec for each pending tx to avoid timeout issues
-    timeout = payload['num'] * 20
-    js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
-    response = {'error': 0, 'msg': 'success update', 'data': None}
-
-    # if '[object Object]' in response['msg']:
-
-    return JsonResponse(response)
+# def get_address(request):
+#     """
+#         End-point for POST request with TelegramUser
+#         data to retrieve wallet address
+#         """
+#     response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
+#
+#     user = json.loads(request.body)
+#     wallet = Wallet.objects.filter(user__id=user['id']).first()
+#
+#     if wallet:
+#         response = {'error': 0, 'msg': f'[{wallet}] success _get_address_ call', 'data': wallet.address}
+#         logger.info(f"[{wallet.user}]: {response['msg']}")
+#
+#     return JsonResponse(response)
 
 
-def get_balance(request):
-    """
-    End-point for POST request with TelegramUser
-    data to retrieve wallet balance from network
-    """
-    response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
-
-    payload = json.loads(request.body)
-    logger.info(f"tipbot::views::get_balance({payload})")
-
-    wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
-                                   Q(address=payload['address'])).first()
-
-    if not wallet: return JsonResponse(response)
-
-    balance = js_handler.balance(mnemonics=wallet.decrypt_mnemonics())
-
-    if balance['error']: return JsonResponse(balance)
-
-    wallet.balance = balance['data']
-    wallet.save()
-    response = {'error': 0, 'msg': 'success', 'data': wallet.balance}
-
-    return JsonResponse(response)
-
-
-def get_address_balance(request):
-    """
-    End-point for POST request with address
-    data to retrieve account balance from network
-    """
-    payload = json.loads(request.body)
-    logger.info(f"tipbot::views::get_address_balance({payload})")
-    response = js_handler.address_balance(payload['address'])
-
-    if response['error']: return JsonResponse(response)
-
-    response['data'] = utils.readable_balance(response['data'])
-
-    return JsonResponse(response)
+# def update(request):
+#     """
+#     End-point for POST request with TelegramUser
+#     data to receive wallet pendingTransactions
+#     """
+#     payload = json.loads(request.body)
+#     logger.info(f"tipbot::views::get_update_balance({payload})")
+#
+#     wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
+#                                    Q(address=payload['address'])).first()
+#     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
+#
+#     if not wallet: return JsonResponse(response)
+#
+#     # Set timeout to get 10sec for each pending tx to avoid timeout issues
+#     timeout = payload['num'] * 20
+#     js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
+#     response = {'error': 0, 'msg': 'success update', 'data': None}
+#
+#     # if '[object Object]' in response['msg']:
+#
+#     return JsonResponse(response)
+#
+#
+# def get_balance(request):
+#     """
+#     End-point for POST request with TelegramUser
+#     data to retrieve wallet balance from network
+#     """
+#     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
+#
+#     payload = json.loads(request.body)
+#     logger.info(f"tipbot::views::get_balance({payload})")
+#
+#     wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
+#                                    Q(address=payload['address'])).first()
+#
+#     if not wallet: return JsonResponse(response)
+#
+#     balance = js_handler.balance(mnemonics=wallet.decrypt_mnemonics())
+#
+#     if balance['error']: return JsonResponse(balance)
+#
+#     wallet.balance = balance['data']
+#     wallet.save()
+#     response = {'error': 0, 'msg': 'success', 'data': wallet.balance}
+#
+#     return JsonResponse(response)
+#
+#
+# def get_address_balance(request):
+#     """
+#     End-point for POST request with address
+#     data to retrieve account balance from network
+#     """
+#     payload = json.loads(request.body)
+#     logger.info(f"tipbot::views::get_address_balance({payload})")
+#     response = js_handler.address_balance(payload['address'])
+#
+#     if response['error']: return JsonResponse(response)
+#
+#     response['data'] = utils.readable_balance(response['data'])
+#
+#     return JsonResponse(response)

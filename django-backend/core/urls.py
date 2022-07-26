@@ -19,8 +19,8 @@ router.register(r'alias', AccountAliasView, 'alias')
 
 urlpatterns = [
     path('', index),
-    path('tipbot/', include(tipbot_urls)),
     path('admin/', admin.site.urls),
     path('api/', include(vtm_urls)),
+    path('api/', include(tipbot_urls)),
     path('api/', include(router.urls)),
     ]

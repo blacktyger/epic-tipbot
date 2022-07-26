@@ -160,14 +160,5 @@ Need help? [@blacktyg3r](https://t.me/blacktyg3r)
 #     ️"""
 
 
-if platform.system() == 'Windows':
-    class Database:
-        TIPBOT_URL = "http://127.0.0.1:8000/tipbot"
-        API_URL = "http://127.0.0.1:8000/api"
-else:
-    class Database:
-        TIPBOT_URL = "http://127.0.0.1:3273/tipbot"
-        API_URL = "http://127.0.0.1:3273/api"
-
 
 
