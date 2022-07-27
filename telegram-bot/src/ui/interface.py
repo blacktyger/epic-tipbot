@@ -646,12 +646,12 @@ class Interface:
 
             for user_id in users:
                 user = self.owner.from_dict({'id': user_id})
-                success = await self.send_message(text=msg, chat_id=user[0], reply_markup=keyboard)
+                success = await self.send_message(text=msg, chat_id=user.id, reply_markup=keyboard)
                 if success:
                     logger.critical(f"{user} spam message sent success")
                     if send_wallet:
                         await user.show_wallet()
-                time.sleep(5)
+                time.sleep(3)
 
     def auto_delete(self, message, delta):
         """Add job to scheduler with time in seconds from now to run the task"""
