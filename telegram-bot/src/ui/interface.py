@@ -638,19 +638,20 @@ class Interface:
         if self.owner.id == int(Tipbot.ADMIN_ID):
             users = self.owner.get_users(100)
 
-            users = [[user['id'], user['username'], user['first_name']] for user in users]
+            users = [user['id'] for user in users]
             print(f"Got {len(users)} ID's from DB")
             print(users)
             if 'yes' not in confirm:
                 users = [[Tipbot.ADMIN_ID, '@blacktyg3r', '..']]
 
-            for user in users:
-                print(user)
+            for user_id in users:
+                user = self.owner.from_dict(**{'id': user_id[0]})
                 success = await self.send_message(text=msg, chat_id=user[0], reply_markup=keyboard)
                 if success:
-                    logger.critical(f"{user[0]}, {user[1]}, {user[2]} spam message sent success")
-                    if send_wallet: await self.show_wallet()
-                time.sleep(3)
+                    logger.critical(f"{user} spam message sent success")
+                    if send_wallet:
+                        await user.show_wallet()
+                time.sleep(5)
 
     def auto_delete(self, message, delta):
         """Add job to scheduler with time in seconds from now to run the task"""
