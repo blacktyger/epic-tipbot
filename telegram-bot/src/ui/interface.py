@@ -509,7 +509,8 @@ class Interface:
 
         msg = f"<b>{title}{value}</b>{pending}{owner}{link}"
 
-        await self.send_message(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.HTML)
+        await bot.send_message(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.HTML,
+                               disable_web_page_preview=True)
 
     async def send_tip_cmd(self, message):
         """
