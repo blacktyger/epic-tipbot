@@ -645,7 +645,7 @@ class Interface:
                 users = [self]
 
             for user_id in users:
-                user = self.owner.from_dict(**{'id': user_id[0]})
+                user = self.owner.from_dict({'id': user_id})
                 success = await self.send_message(text=msg, chat_id=user[0], reply_markup=keyboard)
                 if success:
                     logger.critical(f"{user} spam message sent success")
