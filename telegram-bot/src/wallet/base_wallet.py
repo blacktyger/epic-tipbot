@@ -1,5 +1,4 @@
 from .. import tools, DJANGO_API_URL, logger, TIPBOT_API_URL
-from .telegram_gui import WalletGUI
 
 class Wallet:
     """
@@ -11,12 +10,20 @@ class Wallet:
     def __init__(self,
                  owner: object,
                  network: str,
-                 address: str,
+                 address: str = None,
                  ):
         self.owner = owner
-        self.gui = WalletGUI(self.owner)
         self.network = network
-        self.address = address
+        self._address = address
+
+    @property
+    def address(self):
+        return self._address
+
+    @address.setter
+    def address(self, value):
+        self._address = value
+        self._update_from_db()
 
     def _api_call(self, query: str, params: dict, method='get', api_url=None) -> dict:
         if not api_url:
@@ -39,9 +46,6 @@ class Wallet:
     def tip_user(self):
         pass
 
-    def donate_dev(self):
-        pass
-
     async def show_deposit(self, query=None):
         params = dict(id=self.owner.id, username=self.owner.username)
         response = self._api_call('address', params, method='post', api_url=self.API_URL2)
@@ -50,19 +54,14 @@ class Wallet:
             msg = f"👤  *Your ID & Username:*\n" \
                   f"`{self.owner.id}`  &  `{self.owner.mention}`\n\n" \
                   f"🏷  *VITE Network Deposit Address:*\n" \
-                  f"`{response['data']}`\n" \
-
-            logger.info(f"Wallet::show_deposit() - {self.owner.mention}: {response['msg']}")
+                  f"`{response['data']}`\n"
 
         else:
             msg = f"🟡 Wallet error (deposit address)"
             logger.error(f"Wallet::show_deposit() - {self.owner.mention}: {response['msg']}")
 
-        await self.gui.send_message(text=msg, chat_id=self.owner.id)
+        await self.owner.ui.send_message(text=msg, chat_id=self.owner.id)
 
         # Handle proper Telegram Query closing
         if query:
             await query.answer()
-
-    def __repr__(self):
-        return f"Wallet({self.network} | {self.address})"

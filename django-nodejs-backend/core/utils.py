@@ -2,11 +2,11 @@ from cryptography.fernet import Fernet
 
 import json
 
-from .js_handler import create
 from .secrets import secret_links_login, secret_links_key, encryption_key
 from vtm.models import Token, TelegramUser
 from .secret_links import OneTimeSecret
-from tipbot.models import Wallet, AccountAlias
+from tipbot.models import Wallet
+from .vite_connector import ViteConnector
 
 
 def get_or_create_telegram_user(request) -> tuple:
@@ -56,7 +56,9 @@ def create_vite_wallet(user: TelegramUser) -> dict:
     :param user: TelegramUser instance
     :return: JSON Response with Wallet instance
     """
-    new_wallet = create()
+    provider = ViteConnector(logger=None)
+    new_wallet = provider.create_wallet()
+
     if new_wallet['error']:
         response = {'error': 1, 'msg': new_wallet['msg'], 'data': None}
     else:
@@ -80,12 +82,22 @@ def create_wallet_secret(wallet: Wallet, request) -> str:
     :param request:
     :return: One-time use secret URL send to Telegram User with sensitive wallet data
     """
+
+    if 'acc_pass' in request.session:
+        password = request.session['acc_pass']
+    else:
+        password = TelegramUser.objects.make_random_password()
+        wallet.user.set_password(password)
+        wallet.user.save()
+
+    print(password)
+
     message = f"\n// === EPIC-CASH TIPBOT === \\\\\n" \
               f"\n// WALLET MNEMONICS:\n" \
               f"\n{wallet.decrypt_mnemonics()}\n" \
               f"\n===========================" \
               f"\n// ACCOUNT PASSWORD:\n" \
-              f"\n{request.session['acc_pass']}" \
+              f"\n{password}" \
               f"\n===========================\n" \
               f"\nPlease make copy of this message, it can be viewed only once!"
 
@@ -93,10 +105,11 @@ def create_wallet_secret(wallet: Wallet, request) -> str:
     try:
         secret_obj = secret.share(message)
         secret_url = f"{secret.secret_link_url}{secret_obj['secret_key']}"
-        del request.session['acc_pass']
+        try: del request.session['acc_pass']
+        except: pass
         return secret_url
-    except Exception:
-        print(f"Secret messages server overload, testing?")
+    except Exception as e:
+        print(e)
         return 'failed secret message'
 
 

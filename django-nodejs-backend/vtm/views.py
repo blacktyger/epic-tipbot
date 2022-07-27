@@ -98,8 +98,8 @@ class CreateTelegramUserView(CreateView):
         user, exists = utils.get_or_create_telegram_user(request)
         serialized = TelegramUserSerializer(user)
 
-        if exists:
-            logger.info(f"[{user.mention}]: users/create (already exists)")
+        if exists and user.wallet.first():
+            logger.info(f"[{user.mention}]: CreateTelegramUserView(users/create) -> already exists")
             response = {'error': 0, 'msg': 'account already active', 'data': serialized.data}
         else:
             vite_wallet = utils.create_vite_wallet(user)
@@ -110,6 +110,11 @@ class CreateTelegramUserView(CreateView):
                 logger.error(f"[{user.mention}]: create wallet: {vite_wallet['msg']}")
             else:
                 secret_url = utils.create_wallet_secret(vite_wallet['data'], request)
-                response = {'error': 0, 'msg': 'account registration success', 'data': secret_url}
+                if 'failed secret message' in secret_url:
+                    response = {'error': 1, 'msg': 'wallet setup error', 'data': None}
+                    vite_wallet['data'].delete()
+                    logger.error(f'Error OneSecret message, wallet deleted, process failed')
+                else:
+                    response = {'error': 0, 'msg': 'account registration success', 'data': secret_url}
 
         return JsonResponse(response)

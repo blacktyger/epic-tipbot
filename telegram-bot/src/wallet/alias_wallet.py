@@ -34,8 +34,9 @@ class Wallet:
             return None
 
     def balance(self):
-        response = tools.api_call('address_balance', TIPBOT_API_URL, self.params(), 'post')
-        if response['error']: return 0
+        response = tools.api_call('balance', TIPBOT_API_URL, self.params(), 'post')
+        if response['error']:
+            return 0
 
         return response['data']
 

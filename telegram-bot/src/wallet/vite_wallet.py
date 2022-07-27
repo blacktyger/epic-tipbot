@@ -15,66 +15,65 @@ class ViteWallet(Wallet):
     Epic asset: EPIC-002 TOKEN
     """
 
-    def __init__(self, owner: object, address: str):
-        self.gui = None
-        super().__init__(owner=owner, address=address, network=settings.Network.VITE.name)
-        if not self.is_valid_address(address):
-            raise Exception("Invalid VITE address")
+    def __init__(self, owner: object, address: str = None):
+        super().__init__(owner=owner, network=settings.Network.VITE.name)
+        self.is_updating = False
+        self.last_balance = {}
 
-        self.address = address
-        self._update_from_db()
+        if self.is_valid_address(address):
+            self._update_from_db()
 
     def epic_balance(self) -> dict:
+        self.is_updating = True
+
         # Send POST request to get wallet balance from network
         params = {'address': self.address, 'id': self.owner.id}
         balance = self._api_call('balance', params, method='post', api_url=self.API_URL2)
-        # pprint(balance)
 
-        if balance['error']: return balance
-
-        wallet_balance = self.parse_vite_balance(balance['data'])
-
-        if isinstance(wallet_balance, dict) and 'EPIC' in wallet_balance.keys():
-            epic_balance = tools.float_to_str(wallet_balance['EPIC'])
+        if balance['error']:
+            self.is_updating = False
+            self.last_balance = balance
         else:
-            epic_balance = 0.0
+            balances, pending = self.parse_vite_balance(balance['data'])
 
-        # Get Epic-Cash price in USD from Coingecko API
-        epic_vs_usd = settings.MarketData().price_epic_vs('USD')
-        balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+            if isinstance(balances, dict) and 'EPIC' in balances.keys():
+                epic_balance = tools.float_to_str(balances['EPIC'])
+            else:
+                epic_balance = 0.0
 
-        wallet_balance['string'] = epic_balance, balance_in_usd
-        response = {'error': 0, 'msg': 'success', 'data': wallet_balance}
+            # Get Epic-Cash price in USD from Coingecko API
+            epic_vs_usd = settings.MarketData().price_epic_vs('USD')
+            balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)}" \
+                             f" USD" if epic_vs_usd else ''
 
-        if balance['data']['pending']:
-            response['msg'] = 'pendingTransactions'
-            response['data']['pending'] = balance['data']['pending']
+            self.is_updating = False
+            self.last_balance = {'error': 0, 'msg': 'success', 'data': {
+                                 'string': (epic_balance, balance_in_usd),
+                                 'pending': pending}}
+        return self.last_balance
 
-        return response
+    def update_balance(self):
+        if self.is_updating:
+            logger.warning('updating thread already running for this wallet instance')
+            return True
 
-    def update_balance(self, num: int = 1):
         # Send POST request to update wallet balance (receiveTransactions call)
-        params = {'address': self.address, 'id': self.owner.id, 'num': num}
+        self.is_updating = True
+        params = {'address': self.address, 'id': self.owner.id}
         response = self._api_call('update', params, method='post', api_url=self.API_URL2)
 
         if response['error']:
-            logger.error(f'ViteWallet::update_balance() - {response["msg"]}')
+            logger.error(f'@{self.owner.name} ViteWallet::update_balance() '
+                         f'-> {response["msg"]}')
+            self.is_updating = False
             return
 
+        self.is_updating = False
         return True
 
     @staticmethod
     def parse_vite_balance(data: dict):
-        """Helper to parse Vite wallet balances from network"""
-        balances = {}
-
-        if 'balanceInfoMap' in data.keys():
-            for token_id, token_details in data['balanceInfoMap'].items():
-                token = token_details['tokenInfo']
-                balance = int(token_details['balance']) / 10 ** token['decimals']
-                balances[token['tokenSymbol']] = balance
-
-        return balances
+        return tools.parse_vite_balance(data)
 
     def _update_from_db(self):
         if not self.address:
@@ -86,7 +85,7 @@ class ViteWallet(Wallet):
         response = self._api_call(query='wallets', params=params)
 
         if response['error']:
-            logger.error(f'ViteWallet::_update_from_db() - {response["msg"]}')
+            logger.error(f'@{self.owner.name} ViteWallet::_update_from_db() -> {response["msg"]}')
             return
 
         for key, value in response.items():
@@ -95,6 +94,7 @@ class ViteWallet(Wallet):
     @staticmethod
     def is_valid_address(address: str):
         """Validate Vite address"""
+        address = str(address)
         return len(address) == 55 and address.startswith('vite_')
 
     @staticmethod
@@ -130,8 +130,8 @@ class ViteWallet(Wallet):
                 msg = f"🟡 {response['msg']}"
 
             logger.error(f"ViteWallet::withdraw() - {self.owner.mention}: {response['msg']}")
-            await self.gui.send_message(text=msg, chat_id=self.owner.id)
-            await self.gui.remove_state_messages(state)
+            await self.owner.ui.send_message(text=msg, chat_id=self.owner.id)
+            await self.owner.ui.remove_state_messages(state)
             await query.answer()
             return
 
@@ -140,7 +140,7 @@ class ViteWallet(Wallet):
         time.sleep(1)
 
         # Remove messages from previous state
-        await self.gui.remove_state_messages(state)
+        await self.owner.ui.remove_state_messages(state)
 
         # Create Vitescan.io explorer link to transaction
         transaction_hash = response['data']['hash']
@@ -152,7 +152,7 @@ class ViteWallet(Wallet):
                       f"▪️[Transaction details (vitescan.io)]({explorer_url})"
 
         # Send tx confirmation to sender's private chat
-        await self.gui.send_message(text=private_msg, chat_id=self.owner.id)
+        await self.owner.ui.send_message(text=private_msg, chat_id=self.owner.id)
 
         # Finish withdraw state
         await state.finish()
@@ -195,8 +195,8 @@ class ViteWallet(Wallet):
                     msg = f"🟡 {response['msg']}"
 
                 logger.error(f"ViteWallet::send() - {self.owner.mention}: {response['msg']}")
-                await self.gui.send_message(text=msg, chat_id=self.owner.id)
-                await self.gui.remove_state_messages(state)
+                await self.owner.ui.send_message(text=msg, chat_id=self.owner.id)
+                await self.owner.ui.remove_state_messages(state)
                 await query.answer()
 
                 return
@@ -204,7 +204,7 @@ class ViteWallet(Wallet):
             # Remove messages from previous state only at first iteration
             if i == 0:
                 # Show user notification/alert
-                await self.gui.remove_state_messages(state)
+                await self.owner.ui.remove_state_messages(state)
                 await query.answer(text='Transaction Confirmed!')
                 time.sleep(1)
 
@@ -219,11 +219,11 @@ class ViteWallet(Wallet):
             receiver_msg = f"💸 `{amount} EPIC from ` {self.owner.get_mention()}"
 
             # Send tx confirmation to sender's private chat
-            await self.gui.send_message(text=private_msg, chat_id=self.owner.id)
+            await self.owner.ui.send_message(text=private_msg, chat_id=self.owner.id)
 
             # Send notification to receiver's private chat
             if not receiver.is_bot:
-                await self.gui.send_message(text=receiver_msg, chat_id=receiver.id)
+                await self.owner.ui.send_message(text=receiver_msg, chat_id=receiver.id)
 
             # Finish send state when last element from list
             if i+1 == len(data['recipients']):
@@ -270,13 +270,14 @@ class ViteWallet(Wallet):
                 'receiver': receiver.params()
                 }
 
-            logger.info(f"ViteWallet::send_tip({params})")
+            logger.info(f"@{payload['sender'].name} ViteWallet::send_tip"
+                        f"({payload['amount']} -> {receiver})")
             response = self._api_call('send_transaction', params, method='post', api_url=self.API_URL2)
 
             # Handle error from VITE network
             if response['error']:
                 if 'sendBlock.Height must be larger than 1' in response['msg']:
-                    msg = f"Your wallet is empty."
+                    msg = f"Your wallet is empty 🕸"
                 else:
                     msg = f"{response['msg']}"
                 finished_transactions.append({'error': 1, 'msg': msg, 'data': None})
@@ -287,6 +288,16 @@ class ViteWallet(Wallet):
 
         return {'msg': f'send_tip success: {success_transactions}/{len(payload["receivers"])}',
                 'error': 0, 'data': finished_transactions}
+
+    @property
+    def short_address(self) -> str:
+        if self.address:
+            return f"{self.address[0:8]}...{self.address[-4:]}"
+        else:
+            return f"No address"
+
+    def __repr__(self):
+        return f"Wallet({self.network} | {self.short_address})"
 
 
 async def welcome_screen(user, message):

@@ -65,6 +65,7 @@ class Network:
         is_native = True
         fee = 0.007
 
+
 class Tests:
     language = ['pl', 'en', 'es']
     username = [None, 'Mad Max', 'Dearey', 'Pecan', 'Maestro', 'Halfmast', None, 'Peep', 'Boomer',
@@ -85,13 +86,13 @@ class Tests:
 
 
 class Tipbot:
-    MAINTENANCE = True
+    MAINTENANCE = False
     MAX_RECEIVERS = 5
     TIME_LOCK = 2.2
     ADMIN_ID = '803516752'
     DONATION_ADDRESS = 'vite_0ab437d8a54d52abc802c0e75210885e761d328eaefed14204'
     HELP_STRING = \
-"""
+        """
 🤖 *Hey, I'm Epic-Cash Tip-Bot* 👋
 
 To signup with new account:
@@ -112,7 +113,7 @@ Need help? [@blacktyg3r](https://t.me/blacktyg3r)
 """
 
     FAQ_STRING = \
-"""
+        """
 ℹ️ *Epic Tip-Bot FAQ*
 
 👉 *What exactly is Tip-Bot Wallet?*
@@ -133,41 +134,16 @@ Need help? [@blacktyg3r](https://t.me/blacktyg3r)
 👉 *Can I send EPIC to someone without Tip-Bot account?*
 ▪️ You can also send/withdraw from your wallet to any valid VITE address (starting with `vite_...`).
 
-
 """
-
-#     """
-# 🤖 *Hey, I'm Epic-Cash Tip-Bot* 👋
-#
-# /create to make account and wallet
-#
-# ▪️ You will receive one-time link with your wallet *seedphrase* and *Tip-Bot* account *password* - please save them somewhere safe!
-#
-# ▪️ Now you can deposit Epic-Cash to your wallet from *Vite Mobile/Desktop or Web app*, more details at vite.org.
-#
-# /address to see your deposit address
-# /balance to see your EPIC token balance
-#
-# /tip `@username` & `amount` - Tip other TipBot accounts
-# To use `@username` receiver must have *Tip-Bot* account
-#
-# /send `vite_address` & `amount`
-# You can also send to any valid *vite_address*
-#
-# */donate* `amount` *- developer donation ❤*
-#
-# 💬 Support: *@blacktyg3r* | [EPIC-RADAR](https://t.me/epicticker)
-#     ️"""
 
 
 if platform.system() == 'Windows':
     class Database:
-        TIPBOT_URL = "http://127.0.0.1:8000/tipbot"
-        API_URL = "http://127.0.0.1:8000/api"
+        API_PORT = 8000
+        TIPBOT_URL = f"http://127.0.0.1:{API_PORT}/tipbot"
+        API_URL = f"http://127.0.0.1:{API_PORT}/api"
 else:
     class Database:
-        TIPBOT_URL = "http://127.0.0.1:3273/tipbot"
-        API_URL = "http://127.0.0.1:3273/api"
-
-
-
+        API_PORT = 3273
+        TIPBOT_URL = f"http://127.0.0.1:{API_PORT}/tipbot"
+        API_URL = f"http://127.0.0.1:{API_PORT}/api"

@@ -8,8 +8,8 @@ import json
 from .serializers import WalletSerializer, TransactionSerializer, AccountAliasSerializer
 from vtm.models import Token, TelegramUser
 from .models import Wallet, Transaction, AccountAlias
+from core.vite_connector import ViteConnector
 from core.logger_ import setup_logging
-from core import utils, js_handler
 
 
 logger = setup_logging(name=__name__, console_log_output="stdout", console_log_level="info", console_log_color=True,
@@ -160,11 +160,14 @@ def send_transaction(request):
     # Prepare and execute back-end Vite.js script
     tx_params = {
         'mnemonics': tx.sender.decrypt_mnemonics(),
-        'toAddress': tx.prepare_address(),
-        'tokenId': tx.token.id,
+        'address_id': 0,
+        'to_address': tx.prepare_address(),
+        'token_id': tx.token.id,
         'amount': tx.prepare_amount()
         }
-    transaction = js_handler.send(**tx_params)
+    # transaction = js_handler.send(**tx_params)
+    provider = ViteConnector(logger=logger)
+    transaction = provider.send(**tx_params)
 
     # Update tx status and network transaction data:
     # if success save tx hash, else error msg.
@@ -186,24 +189,24 @@ def send_transaction(request):
         tx.data = {'error': transaction['msg']}
         tx.save()
         response = {'error': 1, 'msg': transaction['msg'], 'data': None}
-        logger.error(f"tipbot::views::send_transaction() - {response['msg']}")
+        logger.warning(f"tipbot::views::send_transaction() - {response['msg']}")
 
     return JsonResponse(response)
 
 
 def get_address(request):
     """
-        End-point for POST request with TelegramUser
-        data to retrieve wallet address
-        """
+    End-point for POST request with TelegramUser
+    data to retrieve wallet address
+    """
     response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
 
     user = json.loads(request.body)
     wallet = Wallet.objects.filter(user__id=user['id']).first()
 
     if wallet:
-        response = {'error': 0, 'msg': f'[{wallet}] success _get_address_ call', 'data': wallet.address}
-        logger.info(f"[{wallet.user}]: {response['msg']}")
+        response = {'error': 0, 'msg': f'get_address success', 'data': wallet.address}
+        # logger.info(f"[{wallet.user}]: {response['msg']}")
 
     return JsonResponse(response)
 
@@ -222,14 +225,12 @@ def update(request):
 
     if not wallet: return JsonResponse(response)
 
-    # Set timeout to get 10sec for each pending tx to avoid timeout issues
-    timeout = payload['num'] * 20
-    js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
-    response = {'error': 0, 'msg': 'success update', 'data': None}
+    # js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
+    params = {'mnemonics': wallet.decrypt_mnemonics(), 'address_id': 0}
+    provider = ViteConnector(logger=logger)
+    provider.update(**params)
 
-    # if '[object Object]' in response['msg']:
-
-    return JsonResponse(response)
+    return JsonResponse(provider.update_response)
 
 
 def get_balance(request):
@@ -242,33 +243,29 @@ def get_balance(request):
     payload = json.loads(request.body)
     logger.info(f"tipbot::views::get_balance({payload})")
 
-    wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
-                                   Q(address=payload['address'])).first()
+    if 'id' in payload:
+        wallet = Wallet.objects.filter(user__id=payload['id']).first()
+    elif 'address' in payload:
+        wallet = Wallet.objects.filter(address=payload['address']).first()
+    else:
+        wallet = None
 
-    if not wallet: return JsonResponse(response)
+    if wallet:
+        params = {'address': wallet.address}
+    elif not wallet and 'address' in payload:
+        params = {'address': payload['address']}
+    else:
+        return JsonResponse(response)
 
-    balance = js_handler.balance(mnemonics=wallet.decrypt_mnemonics())
+    provider = ViteConnector(logger=logger)
+    provider.balance(**params)
 
-    if balance['error']: return JsonResponse(balance)
+    if provider.balance_response['error']:
+        return JsonResponse(provider.balance_response)
 
-    wallet.balance = balance['data']
-    wallet.save()
-    response = {'error': 0, 'msg': 'success', 'data': wallet.balance}
+    if wallet:
+        wallet.balance = provider.balance_response['data']
+        wallet.save()
 
-    return JsonResponse(response)
-
-
-def get_address_balance(request):
-    """
-    End-point for POST request with address
-    data to retrieve account balance from network
-    """
-    payload = json.loads(request.body)
-    logger.info(f"tipbot::views::get_address_balance({payload})")
-    response = js_handler.address_balance(payload['address'])
-
-    if response['error']: return JsonResponse(response)
-
-    response['data'] = utils.readable_balance(response['data'])
-
+    response = {'error': 0, 'msg': 'success', 'data': provider.balance_response['data']}
     return JsonResponse(response)

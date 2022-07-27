@@ -1,26 +1,33 @@
 import {
+    getBalance,
     createWallet,
-    checkBalance,
     sendTransaction,
     getTransactions,
     receiveTransactions,
-    checkAddressBalance,
-} from './vite-api-wallet.js';
+} from './vite-wallet-api.js';
+
+import {
+    logAndExit,
+    DEBUG,
+    sleep,
+    ReceiveProcess
+} from './tools.js'
 
 import _yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 
-/* 
+
+/*
 NODEJS FILE WITH VITE BLOCKCHAIN API CALLS
 
 HOW TO USE:
-Execute with your script/app with arguments:
-node <this_file_path> <api_call> <arg1> <arg2> etc...
+Execute in your script/app with arguments:
+node <this_file_path> <command> <arg1> <arg2> etc...
 
 COMMANDS & ARGS:
-- create    no args
-- balance           -m <mnemonics> -i <address_derivation_id>
-- addressBalance    -a <address>
+- create             no args
+- balance           -a <address> |or| -m <mnemonics> -i <address_derivation_id>
+- transactions      -a <address> -n <number_of_transactions>
 - update            -m <mnemonics> -i <address_derivation_id>
 - send              -m <mnemonics> -i <address_derivation_id>
                     -d <destination_address> -t <tokenId> -a <amount>
@@ -28,7 +35,7 @@ COMMANDS & ARGS:
 */
 
 
-// Extract commands and args from console sdtin
+// Extract commands and args from console stdin
 const yargs = _yargs(hideBin(process.argv));
 const args = await yargs.argv
 
@@ -40,15 +47,11 @@ switch (args._[0]) {
         break
 
     case 'balance':
-        await balance(args.m, args.i)
-        break
-
-    case 'addressBalance':
-        await addressBalance(args.a)
+        await balance(args.a, args.m, args.i)
         break
 
     case 'update':
-        await update(args.m, args.i);
+        await receive(args.m, args.i);
         break
 
     case 'transactions':
@@ -65,113 +68,79 @@ switch (args._[0]) {
 
 
 /*  #########################
-    ### COMMAND FUNCTIONS ### 
+    ### COMMAND FUNCTIONS ###
     #########################   */
 
-
-async function addressBalance (address) {
+// Create new Vite wallet
+export async function create() {
     try {
-        const balance = await checkAddressBalance(address);
-        logAndExit(0, `${args._[0]} success`, balance);
-    } catch (error){
-        logAndExit(1, error)
+        if (DEBUG) {
+            return createWallet();
+        } else {
+            let wallet = createWallet()
+            logAndExit(0, 'create success', wallet)
+        }
+    } catch (error) {logAndExit(1, error)}
+}
+
+
+// Get balance for vite_address from network
+export async function balance(address, mnemonics, address_id) {
+    try {
+        if (DEBUG) {
+            return getBalance(address, mnemonics, address_id);
+        } else {
+            let balance = await getBalance(address, mnemonics, address_id, 800)
+            logAndExit(0, 'balance success', balance)
+        }
+    } catch (error) {logAndExit(1, error)}
+}
+
+
+// Get transactions list for vite_address from network
+export async function transactions(address, size=10, index=0) {
+    try {
+        if (DEBUG) {
+            return getTransactions(address, size, index);
+        } else {
+            let transactions = await getTransactions(address, size, index)
+            logAndExit(0, 'txs success', transactions)
+        }
+    } catch (error) {logAndExit(1, error.message)}
+}
+
+
+// Send transaction to VITE network
+export async function send(mnemonics, address_id, toAddress, tokenId, amount, timeout=5000) {
+    if (DEBUG) {
+        return sendTransaction(mnemonics, address_id, toAddress, tokenId, amount.toString(), timeout)
+    } else {
+        await sendTransaction(mnemonics, address_id,
+            toAddress, tokenId, amount.toString(), timeout).then((result) => {
+            console.log(">> sending " + (parseInt(amount) / 10 ** 8) + " completed")
+            logAndExit(0, 'transaction success', result)
+        }).catch(error => {logAndExit(1, error)})
     }
 }
 
 
-// Send transaction
-async function send(mnemonics, address_id, toAddress, tokenId, amount) {
-    amount = amount.toString();
-
-    try {
-        const tx = await sendTransaction(mnemonics, address_id, toAddress, tokenId, amount)
-
-        if ('error' in tx) {
-            logAndExit(1, tx.error.message)
-        } else {
-            logAndExit(0, `${args._[0]} success`, tx);
-        }
-
-    } catch (error) {logAndExit(1, error)}
-}
-
-
-// Create new Vite wallet
-async function create() {    
-    try {
-        // New Vite wallet
-        const wallet = createWallet();
-
-        // Create first address
-        const firstAddress = wallet.deriveAddress(0);
-        const { originalAddress, publicKey, privateKey, address, path } = firstAddress;
-
-        // Prepare response object
-        const data = {
-            'mnemonics': wallet.mnemonics,
-            'address': address
-        }
-        logAndExit(0, `${args._[0]} success`, data);
-
-    } catch (error) {logAndExit(1, error)}
-}
-
-
-// Get wallet balance from network
-async function balance(mnemonics, address_id) {
-    try {
-        const { balance, unreceived } = await checkBalance(mnemonics, address_id);
-        balance.pending = parseInt(unreceived.blockCount);
-        logAndExit(0, `${args._[0]} success`, balance);
-
-    } catch (error) {logAndExit(1, error)}
-}
-
-
-// Get transactions list for address 
-async function transactions(address, size=10, index=0) {
-    try {
-        let txs = await getTransactions(address, size, index);
-        logAndExit(0, `${args._[0]} success`, txs);
-
-    } catch (error) { logAndExit(1, error) }
-}
-
-
 // Update wallet balance by receiving pending transactions
-async function update(mnemonics, address_id) {
-    let newTransactions = 0
+export async function receive(mnemonics, address_id) {
+    // Initialize receiving manager to provide callback flags
+    const manager = new ReceiveProcess()
+
     try {
-        // Initialize ReceiveTransaction subscribtion task
-        const task = await receiveTransactions(mnemonics, address_id);
+        if (DEBUG) {
+            return receiveTransactions(mnemonics, address_id)
+        } else {
+            await receiveTransactions(mnemonics, address_id, manager, 1000)
 
-        // Handle success responses
-        task.onSuccess( async (result) => {
-            // If no more new transactions stop task, get last 
-            // 10 transactions array for address and exit process.
-            if (result.message.includes("Don't have")) {
-                task.stop();
-                logAndExit(0, `${args._[0]} success`, {new: newTransactions});
-            } else { newTransactions += 1}
-        });
-
-        // Handle error responses
-        task.onError((error) => {logAndExit(1, error)});
-
-        // Start ReceiveTask and close when all 
-        // unreceived transactions are processed
-        task.start({
-            checkTime: 1000,
-            transctionNumber: 10
-        });
-
+            // Keep process alive until receiving is finished or error appears
+            while (manager.status !== 'success') {
+                console.log(">> " + manager.msg)
+                await sleep(1000)
+            }
+            logAndExit(manager.error, manager.msg, manager.data)
+        }
     } catch (error) {logAndExit(1, error)}
-}
-
-
-// Print nested objects to stdout and exit process 
-function  logAndExit(error, msg, data=null) {
-    console.log(JSON.stringify(
-        { error: error, msg: `${msg}`, data: data }, null, 2));
-    process.exit(0);
 }

@@ -6,7 +6,8 @@ from aiogram.utils import markdown
 
 from . import tools, logger, DJANGO_API_URL
 from .wallet import ViteWallet
-from .settings import Tests
+from .settings import Tests, Tipbot
+from .ui import Interface
 
 
 class TipBotUser(User):
@@ -17,13 +18,14 @@ class TipBotUser(User):
 
     def __init__(self, is_registered: bool = False, **kwargs: typing.Any):
         super().__init__(**kwargs)
-        self.wallet = None
         self.is_registered = is_registered
+        self.wallet = ViteWallet(owner=self)
+        self.ui = Interface(self)
 
         # temp_user is used to access some instance methods,
         # in this case do not try to connect with database
         if 'temp_user' not in kwargs.keys():
-            self._update_from_db()
+            self.update_from_db()
 
     @property
     def name(self):
@@ -44,6 +46,9 @@ class TipBotUser(User):
 
     def _api_call(self, query: str, params: dict, method='get') -> dict:
         return tools.api_call(query, self.API_URL, params, method)
+        #
+        # if response['error'] and 'database' in response['msg'].lower():
+        #     raise tools.DatabaseError(response['msg'])
 
     def params(self):
         """Return user obj dictionary"""
@@ -52,14 +57,14 @@ class TipBotUser(User):
     def _update_to_db(self):
         """Update database with values from user obj, ID required"""
         if self.id:
-            logger.info(f"TipBotUser::_update_to_db({self.params()})")
+            logger.info(f"@{self.name} TipBotUser::_update_to_db(users/create)")
             return self._api_call('users/create', self.params(), method='post')
 
     def _get_wallet_from_db(self, address):
-        self.wallet = ViteWallet(owner=self, address=address)
-        logger.info(f"TipBotUser::_get_wallet_from_db() -> {self.wallet}")
+        self.wallet.address = address
+        logger.info(f"@{self.name} TipBotUser::_get_wallet_from_db() -> {self.wallet}")
 
-    def _update_from_db(self) -> None:
+    def update_from_db(self):
         """
         Get TipBotUser data from Django Database, if exists save/update the data
         This method is used everytime when instance is created or registered to db.
@@ -71,26 +76,24 @@ class TipBotUser(User):
             logger.error(f'No first_name, username and id')
             raise Exception(f'No first_name, username and id')
 
-        logger.info(f'TipBotUser::_update_from_db({self.params()})')
-
         # Send requests with params to database
         response = self._api_call('users', self.params())
-        logger.info(f'TipBotUser::_update_from_db() -> {response["data"]}')
+        logger.info(f'@{self.name} TipBotUser::_update_from_db(users) -> {response["msg"]}')
 
         # Handle api_call error:
         if response['error']:
-            logger.error(f'{response["msg"]}')
-            return
+            logger.error(f'@{self.name} {response["msg"]}')
+            return response
 
         # Handle no user/account case
         if not response['data']:
             self.is_registered = False
-            logger.info(f'Database query: {self.log_repr()}')
+            logger.info(f'@{self.name} Database query: {self.log_repr()}')
 
         # Handle multiple users matching to query
         elif len(response['data']) > 1:
             self.is_registered = False
-            logger.warning(f'Returned multiple users ({len(response["data"])}):'
+            logger.warning(f'@{self.name} Returned multiple users ({len(response["data"])}):'
                            f'\n{[(user["id"], user["first_name"]) for user in response["data"]]}')
 
         # Handle fetched user account
@@ -103,7 +106,8 @@ class TipBotUser(User):
 
                 # Handle Wallet object creation
                 if key == 'wallet':
-                    self._get_wallet_from_db(address=value[0])
+                    try: self._get_wallet_from_db(address=value[0])
+                    except Exception: pass
 
                 else:
                     # Handle data differences between database and user payload
@@ -113,7 +117,7 @@ class TipBotUser(User):
 
                     if value_from_user and value_from_user != value_from_db:
                         need_update = True
-                        logger.warning(f"TipBotUser::_update_from_db({key}) NEED UPDATE: "
+                        logger.warning(f"@{self.name} TipBotUser::_update_from_db({key}) NEED UPDATE: "
                                        f"(user): {getattr(self, key)} | (db): {value}")
 
                     # Handle saving values from database to instance
@@ -140,20 +144,22 @@ class TipBotUser(User):
 
         if not response['error']:
             self.is_registered = True
-            self._update_from_db()
-            logger.info(f"{response['msg']} for {self.log_repr()}")
+            self.update_from_db()
+            logger.info(f"@{self.name} User::register() -> {response['msg']}")
         else:
-            logger.warning(f"{response['msg']} for {self.log_repr()}")
+            logger.warning(f"@{self.name} User::register() -> {response['msg']}")
 
         return response
 
     def get_mention(self, name=None, as_html=None) -> str:
-        return markdown.bold(f"@{self.name}") if self.username else \
-            markdown.link(self.name, self.url)
+        if self.username:
+            return f"@{self.username}"
+        else:
+            return markdown.link(self.name, self.url)
 
     def get_url(self):
         """Prepare name and link to profile shown in messages"""
-        return self.get_mention().replace('\\', '')
+        return self.get_mention()
 
     @classmethod
     def get_user(cls, key_word):
@@ -172,11 +178,10 @@ class TipBotUser(User):
     def query_users(self, num: int, match: str):
         params = {'part_username': match}
         response = self._api_call(query='users', params=params)
-        print(response)
 
         # Handle api_call error:
         if response['error']:
-            logger.error(f'{response["msg"]}')
+            logger.error(f'@{self.name} {response["msg"]}')
             return
 
         return response['data'][:num]
@@ -186,10 +191,8 @@ class TipBotUser(User):
 
         # Handle api_call error:
         if response['error']:
-            logger.error(f'{response["msg"]}')
+            logger.error(f'@{self.name} {response["msg"]}')
             return
-
-        print(response['data'])
 
         if random_:
             random.shuffle(response['data'][0])
@@ -198,7 +201,7 @@ class TipBotUser(User):
 
     def log_repr(self) -> str:
         """Prepared string to log user details"""
-        return f"User({self.id} | {self.mention} | registered: {self.is_registered})"
+        return f"User({self.id} | {self.name} | registered: {self.is_registered})"
 
     @classmethod
     def create_test_user(cls):
