@@ -642,7 +642,7 @@ class Interface:
             print(f"Got {len(users)} ID's from DB")
             print(users)
             if 'yes' not in confirm:
-                users = [[Tipbot.ADMIN_ID, '@blacktyg3r', '..']]
+                users = [self]
 
             for user_id in users:
                 user = self.owner.from_dict(**{'id': user_id[0]})
