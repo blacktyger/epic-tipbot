@@ -650,7 +650,7 @@ class Interface:
                 if success:
                     logger.critical(f"{user} spam message sent success")
                     if send_wallet:
-                        await user.interface.show_wallet()
+                        await user.ui.show_wallet()
                 time.sleep(3)
 
     def auto_delete(self, message, delta):
