@@ -4,11 +4,10 @@ class Wallet:
     """Helper class to represent AccountAlias objects as TipBotUser like object"""
 
     def __init__(self, title: str = None, address: str = None, **kwargs):
-        self.owner = None
+        self.owner: object = None
         self.title = title.replace('#', '')
         self.is_bot = True
         self.address = address
-        self.details: dict = {}
 
         for arg, val in kwargs.items():
             setattr(self, arg, val)
@@ -26,10 +25,10 @@ class Wallet:
         else:
             raise Exception('#ALIAS or ADDRESS must be provided.')
 
+        print(response)
         if response['data']:
             for arg, val in response['data'][0].items():
                 setattr(self, arg, val)
-
             return self
         else:
             return None

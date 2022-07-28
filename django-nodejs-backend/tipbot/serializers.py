@@ -18,6 +18,6 @@ class TransactionSerializer(serializers.ModelSerializer):
 class AccountAliasSerializer(serializers.ModelSerializer):
     class Meta:
         model = AccountAlias
-        fields = ('address', 'title', 'details', 'network')
+        fields = ('address', 'title', 'details', 'network', 'owner')
 
 

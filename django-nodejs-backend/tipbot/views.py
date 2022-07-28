@@ -95,6 +95,7 @@ class AccountAliasCreateView(CreateView):
 
     def post(self, request, *args, **kwargs):
         payload = json.loads(request.body)
+        print(payload)
 
         # Get owner TelegramUser object
         owner = TelegramUser.objects.filter(id=payload['owner']).first()

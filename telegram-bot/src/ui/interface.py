@@ -476,11 +476,18 @@ class Interface:
         try: details = eval(message.text.split('"')[1])
         except: details = {}
 
-        # Create a new alias
-        alias = AliasWallet(title=alias_title, owner=self.owner,
-                            address=address, details=details)
+        # Handle owner
+        owner = self.owner
 
-        # Update object params to darabase
+        if 'owner' in details:
+            owner_ = self.owner.from_dict({'username': details['owner'].replace('@', '')})
+            if owner_.is_registered:
+                owner = owner_
+
+        # Create a new alias
+        alias = AliasWallet(title=alias_title, owner=owner, address=address, details=details)
+
+        # Update object params to database
         response = alias.register()
 
         try:
@@ -512,11 +519,16 @@ class Interface:
             pending = 0
             balance_ = {'EPIC': 0}
 
+        if 'owner' in alias.details:
+            owner = alias.details['owner']
+        else:
+            owner = ''
+
         pending = f"  <code>{pending} pending tx</code>\n" if pending else ""
         title = f"🚦 #{alias.title}\n"
         separ = f"{'=' * len(title)}\n"
         value = f"💰  {tools.float_to_str(balance_['EPIC'])} EPIC\n"
-        owner = f"👤  {alias.details['owner']}\n" if 'owner' in alias.details else ''
+        owner = f"👤  {owner}\n"
         link = f"➡️  {alias.details['url'].replace('https://', '')}" if 'url' in alias.details else ''
 
         msg = f"<b>{title}{separ}{value}</b>{pending}{owner}{link}"
