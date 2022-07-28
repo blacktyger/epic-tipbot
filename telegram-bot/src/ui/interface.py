@@ -513,7 +513,7 @@ class Interface:
             balance_ = {'EPIC': 0}
 
         pending = f"  <code>{pending} pending tx</code>\n" if pending else ""
-        title = f"🚦 #{alias.title.capitalize()}\n"
+        title = f"🚦 #{alias.title}\n"
         separ = f"{'=' * len(title)}\n"
         value = f"💰  {tools.float_to_str(balance_['EPIC'])} EPIC\n"
         owner = f"👤  {alias.details['owner']}\n" if 'owner' in alias.details else ''
