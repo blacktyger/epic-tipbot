@@ -789,12 +789,29 @@ class Interface:
         """Helper function for sending messages from bot to TelegramUser"""
         kwargs['parse_mode'] = kwargs['parse_mode'] \
             if 'parse_mode' in kwargs else ParseMode.MARKDOWN
+
+        if kwargs['parse_mode'] == ParseMode.MARKDOWN:
+            kwargs['text'] = kwargs['text'].replace('_', '\_')
+            # kwargs['text'] = kwargs['text'].replace('.', '\.')
+            kwargs['text'] = kwargs['text'].replace('!', '\!')
+            # kwargs['text'] = kwargs['text'].replace(',', '\,')
+
         try:
             message = await bot.send_message(
                 **kwargs, disable_web_page_preview=True)
             return message
         except Exception as e:
             logger.warning(f"{e} (chat_id: {kwargs['chat_id']})")
+            kwargs['parse_mode'] = ParseMode.HTML
+
+            try:
+                message = await bot.send_message(
+                    **kwargs, disable_web_page_preview=True)
+                return message
+
+            except Exception as ee:
+                logger.warning(f"{ee} (chat_id: {kwargs['chat_id']})")
+
 
     @staticmethod
     async def delete_message(message: types.Message):
