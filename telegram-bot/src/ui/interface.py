@@ -104,11 +104,11 @@ class Interface:
             await wallet_gui.edit_text(text=loading_wallet_2(),
                                        reply_markup=keyboard,
                                        parse_mode=ParseMode.MARKDOWN)
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.35)
             await wallet_gui.edit_text(text=loading_wallet_1(),
                                        reply_markup=keyboard,
                                        parse_mode=ParseMode.MARKDOWN)
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(0.35)
 
         balance = self.owner.wallet.last_balance
 
@@ -470,10 +470,21 @@ class Interface:
         # Save message to remove to temp storage
         await state.update_data(msg_confirmation=confirmation)
 
-    async def register_alias(self, message: types.Message, alias: AliasWallet):
+    async def register_alias(self, message: types.Message):
+        alias_title, address = message.text.split(' ')[1:3]
+
+        try: details = eval(message.text.split('"')[1])
+        except: details = {}
+
+        # Create a new alias
+        alias = AliasWallet(title=alias_title, owner=self.owner,
+                            address=address, details=details)
+
+        # Update object params to darabase
         response = alias.register()
 
         try:
+            # Handle error
             if response['error']:
                 msg = f"🟡 Alias registration failed, {response['msg']}"
             else:
@@ -502,12 +513,13 @@ class Interface:
             balance_ = {'EPIC': 0}
 
         pending = f"  <code>{pending} pending tx</code>\n" if pending else ""
-        title = f"🏷  #{alias.title.capitalize()} Funding  🆕\n\n"
+        title = f"🚦 #{alias.title.capitalize()}\n"
+        separ = f"{'=' * len(title)}\n"
         value = f"💰  {tools.float_to_str(balance_['EPIC'])} EPIC\n"
         owner = f"👤  {alias.details['owner']}\n" if 'owner' in alias.details else ''
         link = f"➡️  {alias.details['url'].replace('https://', '')}" if 'url' in alias.details else ''
 
-        msg = f"<b>{title}{value}</b>{pending}{owner}{link}"
+        msg = f"<b>{title}{separ}{value}</b>{pending}{owner}{link}"
 
         await bot.send_message(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.HTML,
                                disable_web_page_preview=True)
@@ -763,13 +775,11 @@ class Interface:
     @staticmethod
     async def send_message(**kwargs):
         """Helper function for sending messages from bot to TelegramUser"""
-        parse_mode = kwargs['parse_mode'] \
+        kwargs['parse_mode'] = kwargs['parse_mode'] \
             if 'parse_mode' in kwargs else ParseMode.MARKDOWN
         try:
             message = await bot.send_message(
-                **kwargs, parse_mode=parse_mode,
-                disable_web_page_preview=True
-                )
+                **kwargs, disable_web_page_preview=True)
             return message
         except Exception as e:
             logger.warning(f"{e} (chat_id: {kwargs['chat_id']})")

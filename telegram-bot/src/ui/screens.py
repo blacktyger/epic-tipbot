@@ -33,7 +33,7 @@ def loading_wallet_1():
 f"""
 {TITLE}
 {LINE}
-⚪️ `Loading wallet..`
+◻️️ `Loading wallet..`
 
 {LINE}
 """
@@ -44,7 +44,7 @@ def loading_wallet_2():
 f"""
 {TITLE}
 {LINE}
-🟡️ `Loading wallet..`
+▫️ `Loading wallet..`
 
 {LINE}
 """

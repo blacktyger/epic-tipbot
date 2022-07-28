@@ -176,12 +176,8 @@ if Tipbot.MAINTENANCE:
 async def create_account_alias(message: types.Message):
     if len(message.text.split(' ')) > 2 and \
         message.text.split(' ')[1].startswith('#'):
-
-        alias_title, address = message.text.split(' ')[1:3]
         owner = TipBotUser.from_obj(message.from_user)
-        alias = AliasWallet(title=alias_title, address=address, owner=owner)
-        print(alias)
-        await owner.ui.register_alias(message=message, alias=alias)
+        await owner.ui.register_alias(message=message)
 
 
 # /------ GET ACCOUNT ALIAS DETAILS ------\ #

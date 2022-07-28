@@ -28,7 +28,8 @@ class ViteWallet(Wallet):
 
         # Send POST request to get wallet balance from network
         params = {'address': self.address, 'id': self.owner.id}
-        balance = self._api_call('balance', params, method='post', api_url=self.API_URL2)
+        balance = self._api_call('balance', params, method='post',
+                                 api_url=self.API_URL2)
 
         if balance['error']:
             self.is_updating = False

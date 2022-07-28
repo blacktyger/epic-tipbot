@@ -71,9 +71,9 @@ def api_call(query: str, url: str, params: dict, method='get') -> dict:
 
     try:
         if 'get' in method:
-            response = requests.get(url=full_url, params=params)
+            response = requests.get(url=full_url, params=params, timeout=60*5)
         else:  # 'post' in method
-            response = requests.post(url=full_url, data=json.dumps(params))
+            response = requests.post(url=full_url, data=json.dumps(params), timeout=60*5)
 
         if response.status_code != 200:
             logger.error(f'@{log_id} {full_url} | {response.status_code}')

@@ -8,6 +8,7 @@ class Wallet:
         self.title = title.replace('#', '')
         self.is_bot = True
         self.address = address
+        self.details: dict = {}
 
         for arg, val in kwargs.items():
             setattr(self, arg, val)
