@@ -44,13 +44,13 @@ async function getBalance(address, mnemonics, address_id=0, timeout=1000) {
 
 // --- GET TRANSACTION LIST --- \\
 // :return: transactions array
-async function getTransactions(address) {
+async function getTransactions(address, pageIndex, pageSize) {
     const provider = connect(method)
 
     // Handle error with VITE node
     if (!provider) { throw "ERROR Connection to VITE NODE" }
-
-    return provider.getTransactionList(address)
+    console.log(">> " + address, pageIndex, pageSize)
+    return provider.getTransactionList({address: address, pageIndex: pageIndex, pageSize: pageSize})
 }
 
 

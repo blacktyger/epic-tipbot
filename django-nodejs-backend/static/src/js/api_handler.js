@@ -27,7 +27,7 @@ node <this_file_path> <command> <arg1> <arg2> etc...
 COMMANDS & ARGS:
 - create             no args
 - balance           -a <address> |or| -m <mnemonics> -i <address_derivation_id>
-- transactions      -a <address> -n <number_of_transactions>
+- transactions      -a <address> -i <page_index> -s <page_size>
 - update            -m <mnemonics> -i <address_derivation_id>
 - send              -m <mnemonics> -i <address_derivation_id>
                     -d <destination_address> -t <tokenId> -a <amount>
@@ -98,13 +98,14 @@ export async function balance(address, mnemonics, address_id) {
 
 
 // Get transactions list for vite_address from network
-export async function transactions(address, size=10, index=0) {
+export async function transactions(address, pageIndex=0, pageSize=10) {
     try {
         if (DEBUG) {
-            return getTransactions(address, size, index);
+            return getTransactions(address, pageIndex, pageSize);
         } else {
-            let transactions = await getTransactions(address, size, index)
-            logAndExit(0, 'txs success', transactions)
+            await getTransactions(address, pageIndex, pageSize).
+                then((transactions) => {logAndExit(0, 'txs success', transactions)}).
+                catch((error) => {logAndExit(1, error.message)})
         }
     } catch (error) {logAndExit(1, error.message)}
 }
