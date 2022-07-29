@@ -78,15 +78,27 @@ class Interface:
 
         if display_wallet: await self.show_wallet()
 
-    async def show_wallet(self, state=None):
+    async def show_wallet(self, state=None, message=None):
         """Spawn wallet interface inside Telegram chat window"""
-
         # Reset old state and data
         if state: await state.reset_state(with_data=True)
 
         # Prepare main wallet GUI (message and inline keyboard)
         keyboard = self.home_keyboard()
 
+        # Handle users using commands in public chats without tip-bot account
+        if not self.owner.is_registered:
+            not_registered_msg = \
+                f"👋 <b>Hey {self.owner.mention}</b>,\n\n" \
+                f"First, create your 📲 <a href='https://t.me/EpicTipBot'><b>EpicTipBot</b></a> Account"
+
+            await bot.send_message(text=not_registered_msg, chat_id=message.chat.id,
+                                   reply_to_message_id=message.message_id,
+                                   parse_mode=ParseMode.HTML,
+                                   disable_web_page_preview=True)
+            return
+
+        # Handle account without wallet
         if not self.owner.wallet.address:
             # Display create wallet screen
             gui = no_wallet()
@@ -811,7 +823,6 @@ class Interface:
 
             except Exception as ee:
                 logger.warning(f"{ee} (chat_id: {kwargs['chat_id']})")
-
 
     @staticmethod
     async def delete_message(message: types.Message):

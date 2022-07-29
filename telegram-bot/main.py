@@ -34,7 +34,7 @@ async def create_account(message: types.Message):
 @dp.message_handler(commands=COMMANDS['wallet'], state='*')
 async def wallet(message: types.Message, state: FSMContext):
     owner = TipBotUser.from_obj(message.from_user)
-    await owner.ui.show_wallet(state=state)
+    await owner.ui.show_wallet(state=state, message=message)
 
 
 # /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
