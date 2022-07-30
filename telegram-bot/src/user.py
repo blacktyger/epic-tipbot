@@ -155,11 +155,11 @@ class TipBotUser(User):
         if self.username:
             return f"@{self.username}"
         else:
-            return markdown.link(self.name, self.url)
+            return f"[{self.name}]({self.url})"
 
     def get_url(self):
         """Prepare name and link to profile shown in messages"""
-        return self.get_mention()
+        return self.get_mention().replace('_', '\_')
 
     @classmethod
     def get_user(cls, key_word):

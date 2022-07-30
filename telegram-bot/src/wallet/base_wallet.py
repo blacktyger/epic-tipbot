@@ -46,22 +46,3 @@ class Wallet:
     def tip_user(self):
         pass
 
-    async def show_deposit(self, query=None):
-        params = dict(id=self.owner.id, username=self.owner.username)
-        response = self._api_call('address', params, method='post', api_url=self.API_URL2)
-
-        if not response['error']:
-            msg = f"👤  *Your ID & Username:*\n" \
-                  f"`{self.owner.id}`  &  `{self.owner.mention}`\n\n" \
-                  f"🏷  *VITE Network Deposit Address:*\n" \
-                  f"`{response['data']}`\n"
-
-        else:
-            msg = f"🟡 Wallet error (deposit address)"
-            logger.error(f"Wallet::show_deposit() - {self.owner.mention}: {response['msg']}")
-
-        await self.owner.ui.send_message(text=msg, chat_id=self.owner.id)
-
-        # Handle proper Telegram Query closing
-        if query:
-            await query.answer()
