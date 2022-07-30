@@ -802,7 +802,7 @@ class Interface:
         kwargs['parse_mode'] = kwargs['parse_mode'] \
             if 'parse_mode' in kwargs else ParseMode.MARKDOWN
 
-        if kwargs['parse_mode'] == ParseMode.MARKDOWN:
+        # if kwargs['parse_mode'] == ParseMode.MARKDOWN:
             # kwargs['text'] = kwargs['text'].replace('_', '\_')
             # kwargs['text'] = kwargs['text'].replace('.', '\.')
             # kwargs['text'] = kwargs['text'].replace('!', '\!')
