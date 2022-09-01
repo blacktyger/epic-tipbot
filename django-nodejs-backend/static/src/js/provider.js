@@ -13,7 +13,7 @@ export function connect(method, timeout=5000) {
     if (method === 'http') {
         service = new HTTP_RPC("https://node.vite.net/gvite/", timeout);
     } else {
-        service = new WS_RPC("wss://node-vite.imal.dev/ws", timeout);
+        service = new WS_RPC("wss://node-vite.thomiz.dev/ws", timeout);
     }
 
     let provider = new ViteAPI(service, () => {
