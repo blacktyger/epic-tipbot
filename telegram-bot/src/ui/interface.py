@@ -664,7 +664,7 @@ class Interface:
 
         self.auto_delete(message, 20)
 
-    async def spam_message(self, message, send_wallet=True):
+    async def spam_message(self, message, send_wallet=False):
         msg = message.text.split('"')[1]
         confirm = message.text.split('"')[-1]
         print(msg, confirm)
@@ -688,7 +688,7 @@ class Interface:
                     logger.critical(f"{user} spam message sent success")
                     if send_wallet:
                         await user.ui.show_wallet()
-                time.sleep(3)
+                time.sleep(0.3)
 
     def auto_delete(self, message, delta):
         """Add job to scheduler with time in seconds from now to run the task"""
