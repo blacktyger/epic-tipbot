@@ -66,12 +66,20 @@ def create_vite_wallet(user: TelegramUser) -> dict:
         mnemonics_b = bytes(new_wallet['data']['mnemonics'], 'utf-8')
         encrypted_mnemonics = Fernet(encryption_key).encrypt(mnemonics_b)
 
-        wallet = Wallet.objects.create(
-            user=user,
-            address=new_wallet['data']['address'],
-            mnemonics=encrypted_mnemonics.decode('utf-8')
-            )
-        response = {'error': 0, 'msg': 'wallet created successfully', 'data': wallet}
+        mnemonics_ = encrypted_mnemonics.decode('utf-8')
+
+        # make sure mnemonics are saved as expected
+        if len(mnemonics_) < 292:
+            print(new_wallet['data']['mnemonics'])
+            response = {'error': 1, 'msg': 'Creating account error, please try again or contact @blacktyg3r', 'data': None}
+        else:
+
+            wallet = Wallet.objects.create(
+                user=user,
+                address=new_wallet['data']['address'],
+                mnemonics=mnemonics_
+                )
+            response = {'error': 0, 'msg': 'wallet created successfully', 'data': wallet}
 
     return response
 
