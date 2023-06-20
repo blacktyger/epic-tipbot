@@ -63,26 +63,22 @@ def create_vite_wallet(user: TelegramUser) -> dict:
         response = {'error': 1, 'msg': new_wallet['msg'], 'data': None}
     else:
         # Encrypt mnemonics before storing in database
-        mnemonics_b = bytes(new_wallet['data']['mnemonics'], 'utf-8')
-        encrypted_mnemonics = Fernet(encryption_key).encrypt(mnemonics_b)
+        raw_mnemonics_string = new_wallet['data']['mnemonics'].lower()
+        raw_mnemonics_bytes = bytes(raw_mnemonics_string, 'utf-8')
+        encrypted_mnemonics_bytes = Fernet(encryption_key).encrypt(raw_mnemonics_bytes)
+        encrypted_mnemonics_string = encrypted_mnemonics_bytes.decode('utf-8')
 
-        mnemonics_ = encrypted_mnemonics.decode('utf-8')
-
-        # make sure mnemonics are saved as expected
-        if len(mnemonics_) < 292:
-            print(new_wallet['data']['mnemonics'])
-            response = {'error': 1, 'msg': 'Creating account error, please try again or contact @blacktyg3r', 'data': None}
+        if len(encrypted_mnemonics_string) < 292:
+            response = {'error': 1, 'msg': 'Creating wallet error, please try again /create or contact @blacktyg3r', 'data': None}
         else:
-
             wallet = Wallet.objects.create(
                 user=user,
                 address=new_wallet['data']['address'],
-                mnemonics=mnemonics_
+                mnemonics=encrypted_mnemonics_string
                 )
             response = {'error': 0, 'msg': 'wallet created successfully', 'data': wallet}
 
     return response
-
 
 def create_wallet_secret(wallet: Wallet, request) -> str:
     """

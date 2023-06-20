@@ -18,7 +18,7 @@ class Wallet(models.Model):
     def decrypt_mnemonics(self):
         try:
             mnemonics_b = self.mnemonics.encode('utf-8')
-            return Fernet(encryption_key).decrypt(mnemonics_b).decode('utf-8')
+            return Fernet(encryption_key).decrypt(mnemonics_b).decode('utf-8').lower()
         except Exception:
             return self.mnemonics
 
@@ -32,6 +32,8 @@ class Wallet(models.Model):
             as_int = int(epic['balance'])
             decimals = epic['tokenInfo']['decimals']
             return round((as_int / 10**decimals), 8)
+        else:
+            return 0.0
 
     def __str__(self):
         return f"Wallet({self.user.mention} | {self.network} | {self.readable_balance()} EPIC)"
