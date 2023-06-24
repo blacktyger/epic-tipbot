@@ -5,8 +5,9 @@ import json
 from .secrets import secret_links_login, secret_links_key, encryption_key
 from vtm.models import Token, TelegramUser
 from .secret_links import OneTimeSecret
+from .settings import VITEX_ADAPTER_SCRIPT_PATH
+from .vite_adapter import ViteJsAdapter
 from tipbot.models import Wallet
-from .vite_connector import ViteConnector
 
 
 def get_or_create_telegram_user(request) -> tuple:
@@ -56,7 +57,7 @@ def create_vite_wallet(user: TelegramUser) -> dict:
     :param user: TelegramUser instance
     :return: JSON Response with Wallet instance
     """
-    provider = ViteConnector(logger=None)
+    provider = ViteJsAdapter(script_path=VITEX_ADAPTER_SCRIPT_PATH)
     new_wallet = provider.create_wallet()
 
     if new_wallet['error']:

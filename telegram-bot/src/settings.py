@@ -1,7 +1,6 @@
 from json import JSONDecodeError
 from decimal import Decimal
 from typing import Union
-import platform
 import random
 import json
 
@@ -136,14 +135,7 @@ Need help? [@blacktyg3r](https://t.me/blacktyg3r)
 
 """
 
-
-if platform.system() == 'Windows':
-    class Database:
-        API_PORT = 8000
-        TIPBOT_URL = f"http://127.0.0.1:{API_PORT}/tipbot"
-        API_URL = f"http://127.0.0.1:{API_PORT}/api"
-else:
-    class Database:
-        API_PORT = 3273
-        TIPBOT_URL = f"http://127.0.0.1:{API_PORT}/tipbot"
-        API_URL = f"http://127.0.0.1:{API_PORT}/api"
+class Database:
+    API_PORT = 3273
+    TIPBOT_URL = f"http://127.0.0.1:{API_PORT}/tipbot"
+    API_URL = f"http://127.0.0.1:{API_PORT}/api"

@@ -1,13 +1,12 @@
 """ "Graphical Interface" for EpicTipBot Wallet in Telegram chat window"""
-import asyncio
-import os
 from datetime import datetime, timedelta
 import threading
+import asyncio
 import typing
 import time
 
-from aiogram.utils.exceptions import MessageToDeleteNotFound, MessageCantBeDeleted
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ParseMode, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.utils.exceptions import MessageToDeleteNotFound, MessageCantBeDeleted
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.utils.callback_data import CallbackData
@@ -44,6 +43,7 @@ class SendStates(StatesGroup):
 class DonateStates(StatesGroup):
     ask_for_amount = State()
     confirmation = State()
+
 
 class Interface:
     """
@@ -92,10 +92,12 @@ class Interface:
                 f"👋 <b>Hey {self.owner.mention}</b>,\n\n" \
                 f"First, create your 📲 <a href='https://t.me/EpicTipBot'><b>EpicTipBot</b></a> Account"
 
-            await bot.send_message(text=not_registered_msg, chat_id=message.chat.id,
-                                   reply_to_message_id=message.message_id,
-                                   parse_mode=ParseMode.HTML,
-                                   disable_web_page_preview=True)
+            kwargs = dict(text=not_registered_msg, chat_id=message.chat.id,
+                          reply_to_message_id=message.message_id,
+                          parse_mode=ParseMode.HTML,
+                          disable_web_page_preview=True, message=message)
+
+            await self.send_message(**kwargs)
             return
 
         # Handle account without wallet
@@ -485,8 +487,10 @@ class Interface:
     async def register_alias(self, message: types.Message):
         alias_title, address = message.text.split(' ')[1:3]
 
-        try: details = eval(message.text.split('"')[1])
-        except: details = {}
+        try:
+            details = eval(message.text.split('"')[1])
+        except:
+            details = {}
 
         # Handle owner
         owner = self.owner
@@ -545,8 +549,10 @@ class Interface:
 
         msg = f"<b>{title}{separ}{value}</b>{pending}{owner}{link}"
 
-        await bot.send_message(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.HTML,
-                               disable_web_page_preview=True)
+        kwargs = dict(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.HTML,
+                      disable_web_page_preview=True)
+
+        await self.send_message(**kwargs, message=message)
 
     async def send_tip_cmd(self, message):
         """
@@ -580,7 +586,7 @@ class Interface:
         # Handle case when tip command have wrong syntax
         if len(message.text.split(' ')) - (len(registered) + len(unknown)) != 2:
             logger.warning(f"@{self.owner.name} ViteWallet::gui::send_tip_cmd() - "
-                         f"Wrong tip command syntax: '{message.text}'")
+                           f"Wrong tip command syntax: '{message.text}'")
             return
 
         params = {
@@ -591,7 +597,7 @@ class Interface:
 
         # Show that transaction is processed
         await self.delete_message(message)
-        edited_message = await self.send_message(text=f"⌛️ {message.text}", chat_id=active_chat)
+        edited_message = await self.send_message(text=f"⌛️ {message.text}", chat_id=active_chat, message=message)
 
         # API Call to send tip transaction
         response = await self.owner.wallet.send_tip(params, edited_message)
@@ -649,18 +655,23 @@ class Interface:
             public_msg = f""
 
         # Remove sender /tip message
-        try: await self.delete_message(edited_message)
-        except: pass
+        try:
+            await self.delete_message(edited_message)
+        except:
+            pass
 
         # Send notification with tip confirmation in active channel
-        await self.send_message(text=public_msg, chat_id=active_chat)
+        await self.send_message(text=public_msg, chat_id=active_chat, message=message)
 
     async def maintenance(self, message):
         msg = f"⚙️ ⚠️ @EpicTipBot is under a maintenance, you will get notice via DM when " \
               f"bot will be back online, apologies for inconvenience."
-        await bot.send_message(text=msg, disable_web_page_preview=True,
-                               reply_markup=self.confirm_failed_tip_keyboard(),
-                               parse_mode=ParseMode.HTML, chat_id=message.chat.id)
+
+        kwargs = dict(text=msg, disable_web_page_preview=True,
+                      reply_markup=self.confirm_failed_tip_keyboard(),
+                      parse_mode=ParseMode.HTML, chat_id=message.chat.id, message=message)
+
+        await self.send_message(**kwargs)
 
         self.auto_delete(message, 20)
 
@@ -699,10 +710,13 @@ class Interface:
         await self.delete_message(message)
         no_receiver_msg = f"💬️ {self.owner.mention}, {' '.join(message.text.split(' ')[1:-1])} is not a valid receiver."
 
-        warning_message = await bot.send_message(text=no_receiver_msg, chat_id=message.chat.id,
-                                                 parse_mode=ParseMode.HTML,
-                                                 reply_markup=self.confirm_failed_tip_keyboard(),
-                                                 disable_web_page_preview=True)
+        kwargs = dict(text=no_receiver_msg, chat_id=message.chat.id,
+                      parse_mode=ParseMode.HTML,
+                      reply_markup=self.confirm_failed_tip_keyboard(),
+                      disable_web_page_preview=True, message=message)
+
+        warning_message = await self.send_message(**kwargs)
+
         self.auto_delete(warning_message, 30)
 
     async def tip_no_receiver_handler(self, message: types.Message):
@@ -710,16 +724,22 @@ class Interface:
         no_receiver_msg = f"👋 <b>Hey {message.text.split(' ')[1]}</b>,\n" \
                           f"{self.owner.mention} is trying to tip you!\n\n" \
                           f" <b>Create your 📲 <a href='https://t.me/EpicTipBot'>EpicTipBot</a> Account</b>"
-        await bot.send_message(text=no_receiver_msg, chat_id=message.chat.id,
-                               parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+        kwargs = dict(text=no_receiver_msg, chat_id=message.chat.id,
+                      parse_mode=ParseMode.HTML, message=message)
+
+        await self.send_message(**kwargs)
 
     async def tip_error_handler(self, message):
         await self.delete_message(message)
         public_feedback = f"💬️ {self.owner.mention}, there was problem with your tip \n\n" \
                           f" <b>Visit 📲 <a href='https://t.me/EpicTipBot'>Wallet App</a></b>"
-        await bot.send_message(text=public_feedback, disable_web_page_preview=True,
-                               reply_markup=self.confirm_failed_tip_keyboard(),
-                               parse_mode=ParseMode.HTML, chat_id=message.chat.id)
+
+        kwargs = dict(text=public_feedback,
+                      reply_markup=self.confirm_failed_tip_keyboard(),
+                      parse_mode=ParseMode.HTML, chat_id=message.chat.id, message=message)
+
+        await self.send_message(**kwargs)
 
     def home_keyboard(self) -> InlineKeyboardMarkup:
         """
@@ -802,23 +822,26 @@ class Interface:
         kwargs['parse_mode'] = kwargs['parse_mode'] \
             if 'parse_mode' in kwargs else ParseMode.MARKDOWN
 
-        # if kwargs['parse_mode'] == ParseMode.MARKDOWN:
-            # kwargs['text'] = kwargs['text'].replace('_', '\_')
-            # kwargs['text'] = kwargs['text'].replace('.', '\.')
-            # kwargs['text'] = kwargs['text'].replace('!', '\!')
-            # kwargs['text'] = kwargs['text'].replace(',', '\,')
+        if 'disable_web_page_preview' not in kwargs:
+            kwargs['disable_web_page_preview'] = True
+
+        # If there is Message objects in kwargs, extract topic thread ID to reply in to it
+        if 'message' in kwargs:
+            if kwargs['message'].chat.is_forum:
+                kwargs['reply_to_message_id'] = kwargs['message'].message_thread_id
+            kwargs.pop('message')
 
         try:
-            message = await bot.send_message(
-                **kwargs, disable_web_page_preview=True)
+            message = await bot.send_message(**kwargs)
             return message
+
         except Exception as e:
+            # Change parse mode to HTML and try again
             logger.warning(f"{e} (chat_id: {kwargs['chat_id']})")
             kwargs['parse_mode'] = ParseMode.HTML
 
             try:
-                message = await bot.send_message(
-                    **kwargs, disable_web_page_preview=True)
+                message = await bot.send_message(**kwargs)
                 return message
 
             except Exception as ee:

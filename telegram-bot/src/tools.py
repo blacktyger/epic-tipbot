@@ -43,11 +43,10 @@ def is_int(value):
 
 def api_call(query: str, url: str, params: dict, method='get') -> dict:
     """ Handle API calls to Django back-end database
-    :param timeout: int
-    :param query: str
-    :param url: str
-    :param params: dict
-    :param method: str
+    :param query: str,
+    :param url: str,
+    :param params: dict,
+    :param method: str,
     :return: dict
     """
     # Prepare database query

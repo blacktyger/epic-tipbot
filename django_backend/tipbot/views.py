@@ -6,15 +6,14 @@ from django.db.models import Q
 import json
 
 from .serializers import WalletSerializer, TransactionSerializer, AccountAliasSerializer
+from django_backend.settings import VITEX_ADAPTER_SCRIPT_PATH
 from vtm.models import Token, TelegramUser
 from .models import Wallet, Transaction, AccountAlias
-from core.vite_connector import ViteConnector
-from core.logger_ import setup_logging
+from django_backend.vite_adapter import ViteJsAdapter
+from django_backend.logger_ import get_logger
 
 
-logger = setup_logging(name=__name__, console_log_output="stdout", console_log_level="info", console_log_color=True,
-                       logfile_file=__name__ + ".log", logfile_log_level="info", logfile_log_color=False,
-                       log_line_template="%(color_on)s[%(asctime)s] [%(threadName)s] [%(levelname)-8s] %(message)s%(color_off)s")
+logger = get_logger()
 
 epic_details = {
     'id': 'tti_f370fadb275bc2a1a839c753',
@@ -167,8 +166,8 @@ def send_transaction(request):
         'amount': tx.prepare_amount()
         }
     # transaction = js_handler.send(**tx_params)
-    provider = ViteConnector(logger=logger)
-    transaction = provider.send(**tx_params)
+    provider = ViteJsAdapter(logger=logger, script_path=VITEX_ADAPTER_SCRIPT_PATH)
+    transaction = provider.send_transaction(**tx_params)
 
     # Update tx status and network transaction data:
     # if success save tx hash, else error msg.
@@ -228,10 +227,10 @@ def update(request):
 
     # js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
     params = {'mnemonics': wallet.decrypt_mnemonics(), 'address_id': 0}
-    provider = ViteConnector(logger=logger)
-    provider.update(**params)
+    provider = ViteJsAdapter(logger=logger, script_path=VITEX_ADAPTER_SCRIPT_PATH)
+    provider.get_updates(**params)
 
-    return JsonResponse(provider.update_response)
+    return JsonResponse(provider.response)
 
 
 def get_balance(request):
@@ -258,15 +257,15 @@ def get_balance(request):
     else:
         return JsonResponse(response)
 
-    provider = ViteConnector(logger=logger)
-    provider.balance(**params)
+    provider = ViteJsAdapter(logger=logger, script_path=VITEX_ADAPTER_SCRIPT_PATH)
+    provider.get_balance(**params)
 
-    if provider.balance_response['error']:
-        return JsonResponse(provider.balance_response)
+    if provider.response['error']:
+        return JsonResponse(provider.response)
 
     if wallet:
-        wallet.balance = provider.balance_response['data']
+        wallet.balance = provider.response['data']
         wallet.save()
 
-    response = {'error': 0, 'msg': 'success', 'data': provider.balance_response['data']}
+    response = {'error': 0, 'msg': 'success', 'data': provider.response['data']}
     return JsonResponse(response)

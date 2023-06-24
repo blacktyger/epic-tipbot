@@ -1,0 +1,13 @@
+/django_backend/tipbot/migrations/
+/django_backend/manage.log
+/telegram-bot/src/keys.py
+/django_backend/vtm/migrations/
+/django_backend/static/src/js/node_modules/
+/django_backend/static/src/js/package-lock.json
+/env/
+/telegram-bot/main.log
+*.pyo
+*.pyc
+__pycache__/
+/.idea/
+/telegram-bot/tipbot_storage.pickle

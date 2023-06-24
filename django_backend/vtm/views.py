@@ -3,15 +3,13 @@ from django.http import JsonResponse
 from rest_framework import viewsets
 from django.db.models import Q
 
-from core.logger_ import setup_logging
+from django_backend.logger_ import get_logger
 from .serializers import *
-from core import utils
+from django_backend import utils
 from .models import *
 
 
-logger = setup_logging(name=__name__, console_log_output="stdout", console_log_level="info", console_log_color=True,
-                       logfile_file=__name__ + ".log", logfile_log_level="info", logfile_log_color=False,
-                       log_line_template="%(color_on)s[%(asctime)s] [%(threadName)s] [%(levelname)-8s] %(message)s%(color_off)s")
+logger = get_logger()
 
 
 class TelegramUserView(viewsets.ModelViewSet):

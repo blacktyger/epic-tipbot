@@ -2,7 +2,7 @@ from cryptography.fernet import Fernet
 from django.conf import settings
 from django.db import models
 
-from core.secrets import encryption_key
+from django_backend.secrets import encryption_key
 from vtm.models import Token
 
 
