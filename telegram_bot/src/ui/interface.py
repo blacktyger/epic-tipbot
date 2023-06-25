@@ -150,7 +150,7 @@ class Interface:
                 await wallet_gui.edit_text(text=pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
                 await asyncio.sleep(0.7)
 
-            balance = await self.owner.wallet.epic_balance()
+            balance = self.owner.wallet.epic_balance()
 
         # Prepare GUI strings
         epic_balance, balance_in_usd = balance['data']['string']

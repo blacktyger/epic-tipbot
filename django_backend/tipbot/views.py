@@ -1,9 +1,10 @@
+import decimal
+import json
+
 from django.views.generic import CreateView
 from django.http import JsonResponse
 from rest_framework import viewsets
 from django.db.models import Q
-
-import json
 
 from .serializers import WalletSerializer, TransactionSerializer, AccountAliasSerializer
 from django_backend.settings import VITEX_ADAPTER_SCRIPT_PATH
@@ -123,10 +124,13 @@ def send_transaction(request):
     sender_wallet = sender.wallet.first()
 
     # Prevent accidental multiple transactions
+    # print(data)
     if sender.locked:
-        response = {'error': 1, 'msg': f"Too many transactions, please wait 5 seconds.", 'data': None}
-        # logger.error(f"[{data['sender']}]: {response['msg']}")
-        return JsonResponse(response)
+        # Ignore locking for fee transactions
+        if data['type_of'] != 'fee':
+            response = {'error': 1, 'msg': f"Too many transactions, please wait 5 seconds.", 'data': None}
+            # logger.error(f"[{data['sender']}]: {response['msg']}")
+            return JsonResponse(response)
 
     # If something is wrong with the amount
     if not data['amount']:
@@ -137,13 +141,13 @@ def send_transaction(request):
     tx_params = {
         'sender': sender_wallet,
         'token': epic,
-        'amount': data['amount'],
+        'amount': decimal.Decimal(data['amount']),
         'type_of': data['type_of'],
         'network': data['network']
         }
 
-    # Handle withdraw transaction (address as receiver)
-    if 'withdraw' in data['type_of']:
+    # Handle withdraw or fee transaction (address as receiver)
+    if 'withdraw' in data['type_of'] or 'fee' in data['type_of']:
         tx_params.update({'address': data['address']})
 
     # Handle send transaction (TipBotUser as receiver)

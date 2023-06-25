@@ -11,9 +11,6 @@
 *.pyc
 __pycache__/
 /.idea/
-/telegram-bot/tipbot_storage.pickle
-/telegram-bot/simple.db
-/telegram-bot/tests/
 /telegram_bot/main.log
 /telegram_bot/tests/
 /telegram_bot/simple.db

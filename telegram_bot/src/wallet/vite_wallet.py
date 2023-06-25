@@ -1,15 +1,15 @@
+from decimal import Decimal
 import threading
-import decimal
-import time
+import asyncio
 
 from aiogram.types import ParseMode
 from aiogram import types
 
+from .. import tools, logger, Tipbot, bot, settings, fees
 from .base_wallet import Wallet
-from .. import tools, logger, Tipbot, bot, settings
 
 
-storage = tools.storage
+MD = ParseMode.MARKDOWN
 
 
 class ViteWallet(Wallet):
@@ -17,6 +17,8 @@ class ViteWallet(Wallet):
     Wallet class to manage VITE blockchain operations.
     Epic asset: EPIC-002 TOKEN
     """
+    LOW_BALANCE_MSG = f"🟡 Insufficient balance"
+    Fee = fees.ViteFee
 
     def __init__(self, owner: object, address: str = None):
         super().__init__(owner=owner, network=settings.Network.VITE.name)
@@ -25,6 +27,59 @@ class ViteWallet(Wallet):
 
         if self.is_valid_address(address):
             self._update_from_db()
+
+    async def _get_fees(self, amount: str | int | Decimal | float, query, state):
+        balance = self.epic_balance()
+
+        if balance['error']:
+            logger.error(f"ViteWallet::_get_fees()::epic_balance() - {self.owner.mention}: {balance['msg']}")
+            await self.owner.ui.send_message(text=balance['msg'], chat_id=self.owner.id)
+            await self.owner.ui.remove_state_messages(state)
+            await query.answer()
+            return
+
+        # Update wallet balance if there are pending transactions
+        if balance['data']['pending']:
+            self.update_balance()
+            balance = self.epic_balance()
+
+        epic_balance = Decimal(balance['data']['string'][0])
+        total_amount = Decimal(amount) + self.Fee.WITHDRAW
+
+        if epic_balance < total_amount:
+            logger.warning(f"ViteWallet::_get_fees() - {self.owner.mention}: {self.LOW_BALANCE_MSG}")
+            text = f"{self.LOW_BALANCE_MSG}, {str(total_amount)} EPIC required."
+            await self.owner.ui.send_message(text=text, chat_id=self.owner.id)
+            await self.owner.ui.remove_state_messages(state)
+            await query.answer()
+            return
+
+        return True
+
+    def _send_fee(self):
+        tx = self._build_transaction(amount=self.Fee.WITHDRAW, address=self.Fee.ADDRESS, type_of='fee')
+        response = self._api_call('send_transaction', tx, method='post', api_url=self.API_URL2)
+
+        if response['error']:
+            logger.error(f"ViteWallet::withdraw()::fee_tx - {self.owner.mention}: {response['msg']}")
+        else:
+            logger.info(f"Fee({self.Fee.WITHDRAW}) from {self.owner.mention} sent")
+
+    def _update_from_db(self):
+        if not self.address:
+            logger.error(f'No address provided.')
+            return
+
+        # database query
+        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
+        response = self._api_call(query='wallets', params=params)
+
+        if response['error']:
+            logger.error(f'@{self.owner.name} ViteWallet::_update_from_db() -> {response["msg"]}')
+            return
+
+        for key, value in response.items():
+            setattr(self, key, value)
 
     def epic_balance(self) -> dict:
         self.is_updating = True
@@ -45,9 +100,8 @@ class ViteWallet(Wallet):
                 epic_balance = 0.0
 
             # Get Epic-Cash price in USD from Coingecko API
-            epic_vs_usd = storage.get(key='epic_vs_usd')
-            balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)}" \
-                             f" USD" if epic_vs_usd else ''
+            epic_vs_usd = self.storage.get(key='epic_vs_usd')
+            balance_in_usd = f"{round(Decimal(epic_balance) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
 
             self.last_balance = {'error': 0, 'msg': 'success', 'data': {
                                  'string': (epic_balance, balance_in_usd),
@@ -67,33 +121,17 @@ class ViteWallet(Wallet):
         response = self._api_call('update', params, method='post', api_url=self.API_URL2)
 
         if response['error']:
-            logger.error(f'@{self.owner.name} ViteWallet::update_balance() '
-                         f'-> {response["msg"]}')
+            logger.error(f'@{self.owner.name} ViteWallet::update_balance() -> {response["msg"]}')
             self.is_updating = False
             return
 
         self.is_updating = False
+
         return True
 
     @staticmethod
     def parse_vite_balance(data: dict):
         return tools.parse_vite_balance(data)
-
-    def _update_from_db(self):
-        if not self.address:
-            logger.error(f'No address provided.')
-            return
-
-        # database query
-        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
-        response = self._api_call(query='wallets', params=params)
-
-        if response['error']:
-            logger.error(f'@{self.owner.name} ViteWallet::_update_from_db() -> {response["msg"]}')
-            return
-
-        for key, value in response.items():
-            setattr(self, key, value)
 
     @staticmethod
     def is_valid_address(address: str):
@@ -106,30 +144,24 @@ class ViteWallet(Wallet):
         """Create VITE explorer transaction URL"""
         return f"https://vitescan.io/tx/{tx_hash}"
 
-    def donate_dev(self):
-        pass
-
     async def withdraw(self, state, query):
         """Used to withdraw to VITE address"""
         # Remove keyboard and display processing msg
         data = await state.get_data()
-        conf_msg = f"⏳ Processing transaction.."
-        await data['msg_confirmation'].edit_text(text=conf_msg, reply_markup=None,
-                                                 parse_mode=ParseMode.MARKDOWN)
-        # Build and send withdraw transaction
-        params = {
-            'sender': self.owner.params(),
-            'amount': data['amount'],
-            'address': data['address'],
-            'type_of': 'withdraw',
-            'network': settings.Network.VITE.symbol
-            }
+        text = f"⏳ Processing the transaction.."
+        await data['msg_confirmation'].edit_text(text=text, reply_markup=None, parse_mode=MD)
 
-        response = self._api_call('send_transaction', params, method='post', api_url=self.API_URL2)
+        # Check wallet balance against full amount (with fees)
+        if not await self._get_fees(data['amount'], query, state):
+            return
+
+        # Send withdraw transaction
+        transaction = self._build_transaction(amount=data['amount'], address=data['address'], type_of='withdraw')
+        response = self._api_call('send_transaction', transaction, method='post', api_url=self.API_URL2)
 
         if response['error']:
             if 'sendBlock.Height must be larger than 1' in response['msg']:
-                msg = f"🟡 Insufficient balance."
+                msg = self.LOW_BALANCE_MSG
             else:
                 msg = f"🟡 {response['msg']}"
 
@@ -139,9 +171,12 @@ class ViteWallet(Wallet):
             await query.answer()
             return
 
+        # Send fee transaction
+        self._send_fee()
+
         # Show user notification/alert
         await query.answer(text='Transaction Confirmed!')
-        time.sleep(1)
+        await asyncio.sleep(1)
 
         # Remove messages from previous state
         await self.owner.ui.remove_state_messages(state)
@@ -152,8 +187,7 @@ class ViteWallet(Wallet):
 
         # Prepare user confirmation message
         amount = tools.float_to_str(data['amount'])
-        private_msg = f"✅ *Withdraw success*\n" \
-                      f"▪️[Transaction details (vitescan.io)]({explorer_url})"
+        private_msg = f"✅ *Withdraw success*\n▪️[Transaction details (vitescan.io)]({explorer_url})"
 
         # Send tx confirmation to sender's private chat
         await self.owner.ui.send_message(text=private_msg, chat_id=self.owner.id)
@@ -171,12 +205,12 @@ class ViteWallet(Wallet):
 
         # Remove keyboard and display processing msg
         conf_msg = f"⏳ Processing transaction.."
-        await data['msg_confirmation'].edit_text(text=conf_msg, reply_markup=None, parse_mode=ParseMode.MARKDOWN)
+        await data['msg_confirmation'].edit_text(text=conf_msg, reply_markup=None, parse_mode=MD)
 
         for i, receiver in enumerate(data['recipients']):
             # Consider anti-spam transaction lock
             if i > 0:
-                time.sleep(settings.Tipbot.TIME_LOCK)
+                await asyncio.sleep(settings.Tipbot.TIME_LOCK)
 
             # Build and send transaction
             params = {
@@ -210,7 +244,7 @@ class ViteWallet(Wallet):
                 # Show user notification/alert
                 await self.owner.ui.remove_state_messages(state)
                 await query.answer(text='Transaction Confirmed!')
-                time.sleep(1)
+                await asyncio.sleep(1)
 
             # Create Vitescan.io explorer link to transaction
             transaction_hash = response['data']['hash']
@@ -218,9 +252,8 @@ class ViteWallet(Wallet):
 
             # Prepare user confirmation message
             amount = tools.float_to_str(data['amount'])
-            private_msg = f"✅ Transaction sent successfully\n" \
-                          f"▪️️ [Transaction details (vitescan.io)]({explorer_url})"
-            receiver_msg = f"💸 `{amount} EPIC from ` {self.owner.get_mention()}"
+            private_msg = f"✅ Transaction sent successfully\n️️ [Transaction details (vitescan.io)]({explorer_url})"
+            receiver_msg = f"💸 `{amount} EPIC` from {self.owner.get_url()}"
 
             # Send tx confirmation to sender's private chat
             await self.owner.ui.send_message(text=private_msg, chat_id=self.owner.id)
@@ -255,7 +288,7 @@ class ViteWallet(Wallet):
             return {'error': 1, 'msg': msg, 'data': None}
 
         # Handle wrong amount
-        if not payload['amount'] or float(payload['amount']) <= 0:
+        if not payload['amount'] or Decimal(payload['amount']) <= 0:
             return {'error': 1, 'msg': f"Wrong amount value.", 'data': None}
 
         # Iterate through list of receivers and send transaction to each
@@ -263,7 +296,7 @@ class ViteWallet(Wallet):
             # Respect anti-flood locking system
             if i > 0:
                 await message.edit_text(text=f"{message.text} ({i+1}/{len(payload['receivers'])})")
-                time.sleep(settings.Tipbot.TIME_LOCK)
+                await asyncio.sleep(settings.Tipbot.TIME_LOCK)
 
             # Build and send tip transaction
             params = {
@@ -306,7 +339,7 @@ class ViteWallet(Wallet):
             msg = f"🟡 Wallet error (deposit address)"
             logger.error(f"Wallet::show_deposit() - {self.owner.mention}: {response['msg']}")
 
-        await bot.send_message(text=msg, chat_id=self.owner.id, parse_mode=ParseMode.MARKDOWN)
+        await bot.send_message(text=msg, chat_id=self.owner.id, parse_mode=MD)
 
         # Handle proper Telegram Query closing
         if query:
@@ -326,8 +359,7 @@ class ViteWallet(Wallet):
 async def welcome_screen(user, message):
     active_chat = message.chat.id
     media = types.MediaGroup()
-    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
-                       caption=Tipbot.HELP_STRING, parse_mode=ParseMode.MARKDOWN)
+    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'), caption=Tipbot.HELP_STRING, parse_mode=MD)
 
     if Tipbot.ADMIN_ID in str(user.id):
         await bot.send_media_group(chat_id=active_chat, media=media)
@@ -338,8 +370,7 @@ async def welcome_screen(user, message):
 async def faq_screen(user, message):
     active_chat = message.chat.id
     media = types.MediaGroup()
-    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'),
-                       caption=Tipbot.FAQ_STRING, parse_mode=ParseMode.MARKDOWN)
+    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'), caption=Tipbot.FAQ_STRING, parse_mode=MD)
 
     if Tipbot.ADMIN_ID in str(user.id):
         await bot.send_media_group(chat_id=active_chat, media=media)

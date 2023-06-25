@@ -1,5 +1,9 @@
 from .. import tools, DJANGO_API_URL, logger, TIPBOT_API_URL
 
+
+storage = tools.storage
+
+
 class Wallet:
     """
     Base Wallet class for blockchain operations and Telegram management.
@@ -14,6 +18,7 @@ class Wallet:
                  ):
         self.owner = owner
         self.network = network
+        self.storage = storage
         self._address = address
 
     @property
@@ -24,6 +29,18 @@ class Wallet:
     def address(self, value):
         self._address = value
         self._update_from_db()
+
+    def _build_transaction(self, **kwargs):
+        """
+        Helper method to build a transaction payload
+        """
+        return {
+            'sender': self.owner.params(),
+            'amount': str(kwargs['amount']),
+            'address': kwargs['address'],
+            'type_of': kwargs['type_of'],
+            'network': self.network
+            }
 
     def _api_call(self, query: str, params: dict, method='get', api_url=None) -> dict:
         if not api_url:
@@ -45,4 +62,3 @@ class Wallet:
 
     def tip_user(self):
         pass
-
