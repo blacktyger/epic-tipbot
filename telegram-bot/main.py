@@ -1,9 +1,11 @@
+import asyncio
+
+from aiogram_cache.storages.memory import MemoryStorage as CacheMemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram import *
-from aiogram.types import ParseMode
-from aiogram.utils import markdown
+import aiogram_cache
 
-from src.settings import Database, MarketData, Tipbot
+from src.settings import Database, Tipbot
 from src import bot, logger, tools
 from src.commands import COMMANDS
 from src.user import TipBotUser
@@ -11,7 +13,7 @@ from src.wallet import *
 from src.ui import *
 
 
-__version__ = '2.0'
+__version__ = '2.5'
 
 # /------ AIOGRAM BOT SETTINGS ------\ #
 dp = Dispatcher(bot, storage=tools.temp_storage())
@@ -19,8 +21,10 @@ dp = Dispatcher(bot, storage=tools.temp_storage())
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
 COMMANDS = COMMANDS
-PRICE = MarketData()
 
+cache_storage = CacheMemoryStorage()
+dp.middleware.setup(aiogram_cache.CacheMiddleware(cache_storage))
+storage = tools.storage
 
 # /------ CREATE ACCOUNT HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['create'])
@@ -224,7 +228,12 @@ async def tests(message: types.Message, state: FSMContext):
     owner = TipBotUser.from_obj(message.from_user)
     await owner.ui.spam_message(message)
 
+
+async def on_startup(*args):
+    asyncio.create_task(tools.MarketData().price_epic_vs(currency='USD'))
+
+
 # /------ START MAIN LOOP ------\ #
 if __name__ == '__main__':
     logger.info("starting")
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)

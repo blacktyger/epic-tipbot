@@ -1,12 +1,15 @@
-from aiogram.types import ParseMode
-from aiogram import types
-
 import threading
 import decimal
 import time
 
+from aiogram.types import ParseMode
+from aiogram import types
+
 from .base_wallet import Wallet
 from .. import tools, logger, Tipbot, bot, settings
+
+
+storage = tools.storage
 
 
 class ViteWallet(Wallet):
@@ -43,14 +46,15 @@ class ViteWallet(Wallet):
                 epic_balance = 0.0
 
             # Get Epic-Cash price in USD from Coingecko API
-            epic_vs_usd = settings.MarketData().price_epic_vs('USD')
+            epic_vs_usd = storage.get(key='epic_vs_usd')
             balance_in_usd = f"{round(decimal.Decimal(epic_balance) * epic_vs_usd, 2)}" \
                              f" USD" if epic_vs_usd else ''
 
-            self.is_updating = False
             self.last_balance = {'error': 0, 'msg': 'success', 'data': {
                                  'string': (epic_balance, balance_in_usd),
                                  'pending': pending}}
+            self.is_updating = False
+
         return self.last_balance
 
     def update_balance(self):

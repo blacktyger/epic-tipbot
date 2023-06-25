@@ -1,52 +1,10 @@
-from json import JSONDecodeError
-from decimal import Decimal
-from typing import Union
 import random
-import json
-
-import requests
 
 
-class MarketData:
-    btc_feed_url = "https://blockchain.info"
-    epic_feed_url = "https://api.coingecko.com/api/v3"
-
-    @classmethod
-    def price_epic_vs(cls, currency: str):
-        symbol = currency.upper()
-        if len(symbol) == 3:
-            try:
-                url = f"{cls.epic_feed_url}/simple/price?ids=epic-cash&vs_currencies={symbol}"
-                data = json.loads(requests.get(url).content)
-                return Decimal(data['epic-cash'][symbol.lower()])
-            except JSONDecodeError as er:
-                print(er)
-                return 0
-
-    @classmethod
-    def price_btc_vs(cls, currency: str):
-        symbol = currency.upper()
-        if len(symbol) == 3:
-            try:
-                url = f"{cls.btc_feed_url}/ticker"
-                data = json.loads(requests.get(url).content)
-                return Decimal(data[symbol]['last'])
-            except JSONDecodeError as er:
-                print(er)
-                return 0
-
-    @classmethod
-    def currency_to_btc(cls, value: Union[Decimal, float, int], currency: str):
-        """Find bitcoin price in given currency"""
-        symbol = currency.upper()
-        if len(symbol) == 3:
-            try:
-                url = f'{cls.btc_feed_url}/tobtc?currency={currency}&value={value}'
-                data = json.loads(requests.get(url).content)
-                return Decimal(data)
-            except JSONDecodeError as er:
-                print(er)
-                return 0
+class Database:
+    API_PORT = 3273
+    TIPBOT_URL = f"http://127.0.0.1:{API_PORT}/tipbot"
+    API_URL = f"http://127.0.0.1:{API_PORT}/api"
 
 
 class Network:
@@ -134,8 +92,3 @@ Need help? [@blacktyg3r](https://t.me/blacktyg3r)
 ▪️ You can also send/withdraw from your wallet to any valid VITE address (starting with `vite_...`).
 
 """
-
-class Database:
-    API_PORT = 3273
-    TIPBOT_URL = f"http://127.0.0.1:{API_PORT}/tipbot"
-    API_URL = f"http://127.0.0.1:{API_PORT}/api"

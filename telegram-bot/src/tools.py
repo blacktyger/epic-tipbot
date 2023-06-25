@@ -1,21 +1,102 @@
-from aiogram.contrib.fsm_storage.files import PickleStorage
-import requests
-import socket
-
+from json import JSONDecodeError
+import asyncio
 import decimal
+import shelve
+import socket
 import json
 import os
 
+from aiogram.contrib.fsm_storage.files import PickleStorage
+import requests
+import aiohttp
+
 from .logger_ import logger
-from .settings import Database, MarketData
+from .settings import Database
 
 
 ctx = decimal.Context()
-PRICE = MarketData()
 ctx.prec = 20
 API_PORT = Database.API_PORT
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
+
+
+class SimpleDatabase:
+    def __init__(self):
+        self.db_file = 'simple.db'
+
+    def update(self, key, value):
+        with shelve.open(self.db_file) as db:
+            db[key] = value
+
+    def get(self, key):
+        with shelve.open(self.db_file) as db:
+            return db.get(key)
+
+
+storage = SimpleDatabase()
+
+
+def temp_storage():
+    """Initialize temporary bot storage (pickle)"""
+    pickle_storage = "tipbot_storage.pickle"
+
+    try:
+        storage = PickleStorage(pickle_storage)
+    except EOFError:
+        os.remove(pickle_storage)
+        storage = PickleStorage(pickle_storage)
+
+    return storage
+
+
+class MarketData:
+    btc_feed_url = "https://blockchain.info"
+    epic_feed_url = "https://api.coingecko.com/api/v3"
+
+    @classmethod
+    async def price_epic_vs(cls, currency: str):
+        symbol = currency.upper()
+        interval = 60
+
+        if len(symbol) == 3:
+            url = f"{cls.epic_feed_url}/simple/price?ids=epic-cash&vs_currencies={symbol}"
+            while True:
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with await session.get(url) as response:
+                            json_response = await response.json(content_type=None)
+                            price = decimal.Decimal(json_response['epic-cash'][symbol.lower()])
+                            storage.update(key='epic_vs_usd', value=price)
+                except (KeyError, JSONDecodeError) as er:
+                    logger.error(f"price_epic_vs: {er}")
+
+                await asyncio.sleep(interval)
+
+    @classmethod
+    def price_btc_vs(cls, currency: str):
+        symbol = currency.upper()
+        if len(symbol) == 3:
+            try:
+                url = f"{cls.btc_feed_url}/ticker"
+                data = json.loads(requests.get(url).content)
+                return decimal.Decimal(data[symbol]['last'])
+            except JSONDecodeError as er:
+                print(er)
+                return 0
+
+    @classmethod
+    def currency_to_btc(cls, value: decimal.Decimal | float | int, currency: str):
+        """Find bitcoin price in given currency"""
+        symbol = currency.upper()
+        if len(symbol) == 3:
+            try:
+                url = f'{cls.btc_feed_url}/tobtc?currency={currency}&value={value}'
+                data = json.loads(requests.get(url).content)
+                return decimal.Decimal(data)
+            except JSONDecodeError as er:
+                print(er)
+                return 0
 
 
 def float_to_str(f):
@@ -126,18 +207,6 @@ def ping_server(timeout=1):
         s.close()
         return True
 
-
-def temp_storage():
-    """Initialize temporary bot storage (pickle)"""
-    pickle_storage = "tipbot_storage.pickle"
-
-    try:
-        storage = PickleStorage(pickle_storage)
-    except EOFError:
-        os.remove(pickle_storage)
-        storage = PickleStorage(pickle_storage)
-
-    return storage
 
 class DatabaseError(Exception):
     pass

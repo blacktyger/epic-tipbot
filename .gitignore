@@ -1,4 +1,5 @@
 /django_backend/tipbot/migrations/
+/django_backend/django_backend/secrets.py
 /django_backend/manage.log
 /telegram-bot/src/keys.py
 /django_backend/vtm/migrations/
@@ -11,3 +12,4 @@
 __pycache__/
 /.idea/
 /telegram-bot/tipbot_storage.pickle
+/telegram-bot/simple.db

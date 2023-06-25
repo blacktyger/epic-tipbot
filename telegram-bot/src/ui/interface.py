@@ -118,16 +118,16 @@ class Interface:
             await wallet_gui.edit_text(text=loading_wallet_2(),
                                        reply_markup=keyboard,
                                        parse_mode=ParseMode.MARKDOWN)
-            await asyncio.sleep(0.35)
+            await asyncio.sleep(0.15)
             await wallet_gui.edit_text(text=loading_wallet_1(),
                                        reply_markup=keyboard,
                                        parse_mode=ParseMode.MARKDOWN)
-            await asyncio.sleep(0.35)
+            await asyncio.sleep(0.15)
 
         balance = self.owner.wallet.last_balance
 
         # Handle response error
-        if balance['error']:
+        if 'error' in balance and balance['error']:
             if 'database' in balance['msg'].lower():
                 gui = connection_error_wallet()
             else:
@@ -162,7 +162,7 @@ class Interface:
                                            parse_mode=ParseMode.MARKDOWN)
                 await asyncio.sleep(0.7)
 
-            balance = self.owner.wallet.epic_balance()
+            balance = await self.owner.wallet.epic_balance()
 
         # Prepare GUI strings
         epic_balance, balance_in_usd = balance['data']['string']

@@ -1,6 +1,6 @@
 from aiogram import Bot
 
-from .settings import Database, Tipbot, MarketData
+from .settings import Database, Tipbot
 from .logger_ import logger
 from .keys import TOKEN
 
