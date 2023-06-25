@@ -2,11 +2,10 @@ import typing
 import random
 
 from aiogram.types import User
-from aiogram.utils import markdown
 
 from . import tools, logger, DJANGO_API_URL
 from .wallet import ViteWallet
-from .settings import Tests, Tipbot
+from .settings import Tests
 from .ui import Interface
 
 
@@ -78,22 +77,22 @@ class TipBotUser(User):
 
         # Send requests with params to database
         response = self._api_call('users', self.params())
-        logger.info(f'@{self.name} TipBotUser::_update_from_db(users) -> {response["msg"]}')
+        logger.info(f'{self.mention} TipBotUser::_update_from_db(users) -> {response["msg"]}')
 
         # Handle api_call error:
         if response['error']:
-            logger.error(f'@{self.name} {response["msg"]}')
+            logger.error(f'{self.mention} {response["msg"]}')
             return response
 
         # Handle no user/account case
         if not response['data']:
             self.is_registered = False
-            logger.info(f'@{self.name} Database query: {self.log_repr()}')
+            logger.info(f'@{self.mention} Database query: {self.log_repr()}')
 
         # Handle multiple users matching to query
         elif len(response['data']) > 1:
             self.is_registered = False
-            logger.warning(f'@{self.name} Returned multiple users ({len(response["data"])}):'
+            logger.warning(f'@{self.mention} Returned multiple users ({len(response["data"])}):'
                            f'\n{[(user["id"], user["first_name"]) for user in response["data"]]}')
 
         # Handle fetched user account
@@ -117,7 +116,7 @@ class TipBotUser(User):
 
                     if value_from_user and value_from_user != value_from_db:
                         need_update = True
-                        logger.warning(f"@{self.name} TipBotUser::_update_from_db({key}) NEED UPDATE: "
+                        logger.warning(f"@{self.mention} TipBotUser::_update_from_db({key}) NEED UPDATE: "
                                        f"(user): {getattr(self, key)} | (db): {value}")
 
                     # Handle saving values from database to instance
@@ -145,9 +144,9 @@ class TipBotUser(User):
         if not response['error']:
             self.is_registered = True
             self.update_from_db()
-            logger.info(f"@{self.name} User::register() -> {response['msg']}")
+            logger.info(f"@{self.mention} User::register() -> {response['msg']}")
         else:
-            logger.warning(f"@{self.name} User::register() -> {response['msg']}")
+            logger.warning(f"@{self.mention} User::register() -> {response['msg']}")
 
         return response
 

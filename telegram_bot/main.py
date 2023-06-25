@@ -230,6 +230,10 @@ async def tests(message: types.Message, state: FSMContext):
 
 
 async def on_startup(*args):
+    """
+    Task to be fired up when main script is started.
+    """
+    # Periodic task: save to temp storage EPIC vs USD market price
     asyncio.create_task(tools.MarketData().price_epic_vs(currency='USD'))
 
 

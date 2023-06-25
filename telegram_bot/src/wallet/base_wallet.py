@@ -8,7 +8,7 @@ class Wallet:
     API_URL2 = TIPBOT_API_URL
 
     def __init__(self,
-                 owner: object,
+                 owner,
                  network: str,
                  address: str = None,
                  ):

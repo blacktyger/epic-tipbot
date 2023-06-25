@@ -30,9 +30,8 @@ class ViteWallet(Wallet):
         self.is_updating = True
 
         # Send POST request to get wallet balance from network
-        params = {'address': self.address, 'id': self.owner.id}
-        balance = self._api_call('balance', params, method='post',
-                                 api_url=self.API_URL2)
+        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
+        balance = self._api_call('balance', params, method='post', api_url=self.API_URL2)
 
         if balance['error']:
             self.is_updating = False
@@ -64,7 +63,7 @@ class ViteWallet(Wallet):
 
         # Send POST request to update wallet balance (receiveTransactions call)
         self.is_updating = True
-        params = {'address': self.address, 'id': self.owner.id}
+        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
         response = self._api_call('update', params, method='post', api_url=self.API_URL2)
 
         if response['error']:
@@ -86,7 +85,7 @@ class ViteWallet(Wallet):
             return
 
         # database query
-        params = {'address': self.address, 'id': self.owner.id}
+        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
         response = self._api_call(query='wallets', params=params)
 
         if response['error']:
@@ -235,10 +234,10 @@ class ViteWallet(Wallet):
                 await state.finish()
                 await query.answer()
 
-            logger.info(f"{self.owner.mention}: sent {amount} to {receiver.mention}")
+            logger.critical(f"{self.owner.mention}: sent {amount} to {receiver.mention}")
 
             # Run threading process to update receiver balance (receiveTransactions call)
-            logger.critical(f"ViteWallet::gui::send_tip() - start balance update for {receiver.mention}")
+            logger.critical(f"{receiver.mention} ViteWallet::gui::send_tip() - start balance update")
             threading.Thread(target=receiver.wallet.update_balance).run()
 
     async def send_tip(self, payload: dict, message):
@@ -275,8 +274,7 @@ class ViteWallet(Wallet):
                 'receiver': receiver.params()
                 }
 
-            logger.info(f"@{payload['sender'].name} ViteWallet::send_tip"
-                        f"({payload['amount']} -> {receiver})")
+            logger.critical(f"@{payload['sender'].name} ViteWallet::send_tip ({payload['amount']} -> {receiver.mention})")
             response = self._api_call('send_transaction', params, method='post', api_url=self.API_URL2)
 
             # Handle error from VITE network
@@ -295,7 +293,7 @@ class ViteWallet(Wallet):
                 'error': 0, 'data': finished_transactions}
 
     async def show_deposit(self, query=None):
-        params = dict(id=self.owner.id, username=self.owner.username)
+        params = dict(id=self.owner.id, username=self.owner.username, first_name=self.owner.first_name)
         response = self._api_call('address', params, method='post', api_url=self.API_URL2)
 
         if not response['error']:
