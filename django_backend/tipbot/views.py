@@ -152,7 +152,7 @@ def send_transaction(request):
 
     # Handle send transaction (TipBotUser as receiver)
     elif 'send' in data['type_of'] or 'tip' in data['type_of']:
-        if 'address' in data['receiver'].keys():
+        if 'address' in data['receiver']:
             tx_params.update({'address': data['receiver']['address']})
         else:
             receiver = TelegramUser.objects.filter(id=data['receiver']['id']).first()
@@ -217,17 +217,24 @@ def get_address(request):
 
 def update(request):
     """
-    End-point for POST request with TelegramUser
-    data to receive wallet pendingTransactions
+    End-point for POST request to receive wallet pendingTransactions
     """
     payload = json.loads(request.body)
     logger.info(f"tipbot::views::get_update_balance({payload})")
+
+    # Used to update non EpicTipBot wallets, requires mnemonics and address derivation id
+    if 'external_wallet' in payload:
+        params = {'mnemonics': payload['mnemonics'], 'address_id': payload['address_id'] if 'address_id' in payload else 0}
+        provider = ViteJsAdapter(logger=logger, script_path=VITEX_ADAPTER_SCRIPT_PATH)
+        provider.get_updates(**params)
+        return JsonResponse(provider.response)
 
     wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
                                    Q(address=payload['address'])).first()
     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
 
-    if not wallet: return JsonResponse(response)
+    if not wallet:
+        return JsonResponse(response)
 
     # js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
     params = {'mnemonics': wallet.decrypt_mnemonics(), 'address_id': 0}

@@ -236,6 +236,9 @@ async def on_startup(*args):
     # Periodic task: save to temp storage EPIC vs USD market price
     asyncio.create_task(tools.MarketData().price_epic_vs(currency='USD'))
 
+    # Periodic task to update fee wallet
+    # asyncio.create_task(tools.fee_wallet_update(mnemonics, address_id))
+
 
 # /------ START MAIN LOOP ------\ #
 if __name__ == '__main__':

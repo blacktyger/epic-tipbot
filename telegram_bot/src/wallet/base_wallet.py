@@ -35,9 +35,11 @@ class Wallet:
         Helper method to build a transaction payload
         """
         return {
+            # 'sender': kwargs['sender'].params() if 'sender' in kwargs else self.owner.params(),
             'sender': self.owner.params(),
             'amount': str(kwargs['amount']),
-            'address': kwargs['address'],
+            'address': kwargs['address'] if 'address' in kwargs else None,
+            'receiver': kwargs['receiver'].params() if 'receiver' in kwargs else None,
             'type_of': kwargs['type_of'],
             'network': self.network
             }

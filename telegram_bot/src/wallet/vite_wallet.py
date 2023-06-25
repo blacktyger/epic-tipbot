@@ -56,14 +56,27 @@ class ViteWallet(Wallet):
 
         return True
 
-    def _send_fee(self):
-        tx = self._build_transaction(amount=self.Fee.WITHDRAW, address=self.Fee.ADDRESS, type_of='fee')
+    def _send_fee(self, type_of: str, amount: float | int | str | Decimal = None) -> None:
+        if type_of in ['withdraw']:
+            value = self.Fee.WITHDRAW
+        elif type_of in ['tip', 'send']:
+            if not amount:
+                logger.error(f"Invalid tip transaction amount: {amount}")
+                return
+
+            value = self.Fee.get_tip_fee(amount)
+            print(f"tip fee: {value}")
+        else:
+            logger.error(f"Invalid transaction type: {type_of}")
+            return
+
+        tx = self._build_transaction(amount=value, address=self.Fee.ADDRESS, type_of='fee')
         response = self._api_call('send_transaction', tx, method='post', api_url=self.API_URL2)
 
         if response['error']:
             logger.error(f"ViteWallet::withdraw()::fee_tx - {self.owner.mention}: {response['msg']}")
         else:
-            logger.info(f"Fee({self.Fee.WITHDRAW}) from {self.owner.mention} sent")
+            logger.info(f"Fee({value}) from {self.owner.mention} sent")
 
     def _update_from_db(self):
         if not self.address:
@@ -172,7 +185,7 @@ class ViteWallet(Wallet):
             return
 
         # Send fee transaction
-        self._send_fee()
+        self._send_fee(type_of='withdraw')
 
         # Show user notification/alert
         await query.answer(text='Transaction Confirmed!')
@@ -213,15 +226,8 @@ class ViteWallet(Wallet):
                 await asyncio.sleep(settings.Tipbot.TIME_LOCK)
 
             # Build and send transaction
-            params = {
-                'sender': self.owner.params(),
-                'receiver': receiver.params(),
-                'amount': data['amount'],
-                'type_of': 'send',
-                'network': settings.Network.VITE.symbol
-                }
-
-            response = self._api_call('send_transaction', params, method='post', api_url=self.API_URL2)
+            transaction = self._build_transaction(amount=data['amount'], receiver=receiver, type_of='send')
+            response = self._api_call('send_transaction', transaction, method='post', api_url=self.API_URL2)
 
             # Handle error case
             if response['error']:
@@ -236,8 +242,10 @@ class ViteWallet(Wallet):
                 await self.owner.ui.send_message(text=msg, chat_id=self.owner.id)
                 await self.owner.ui.remove_state_messages(state)
                 await query.answer()
-
                 return
+
+            # Send fee transaction
+            self._send_fee(type_of='send', amount=data['amount'])
 
             # Remove messages from previous state only at first iteration
             if i == 0:
@@ -270,7 +278,7 @@ class ViteWallet(Wallet):
             logger.critical(f"{self.owner.mention}: sent {amount} to {receiver.mention}")
 
             # Run threading process to update receiver balance (receiveTransactions call)
-            logger.critical(f"{receiver.mention} ViteWallet::gui::send_tip() - start balance update")
+            logger.warning(f"{receiver.mention} ViteWallet::gui::send_to_users() - start balance update")
             threading.Thread(target=receiver.wallet.update_balance).run()
 
     async def send_tip(self, payload: dict, message):
@@ -299,16 +307,9 @@ class ViteWallet(Wallet):
                 await asyncio.sleep(settings.Tipbot.TIME_LOCK)
 
             # Build and send tip transaction
-            params = {
-                'sender': payload['sender'].params(),
-                'amount': payload['amount'],
-                'network': settings.Network.VITE.symbol,
-                'type_of': 'tip',
-                'receiver': receiver.params()
-                }
-
-            logger.critical(f"@{payload['sender'].name} ViteWallet::send_tip ({payload['amount']} -> {receiver.mention})")
-            response = self._api_call('send_transaction', params, method='post', api_url=self.API_URL2)
+            transaction = self._build_transaction(amount=payload['amount'], receiver=receiver, type_of='tip')
+            logger.critical(f"{self.owner.mention} ViteWallet::send_tip() ({payload['amount']} -> {receiver.mention})")
+            response = self._api_call('send_transaction', transaction, method='post', api_url=self.API_URL2)
 
             # Handle error from VITE network
             if response['error']:
@@ -318,6 +319,9 @@ class ViteWallet(Wallet):
                     msg = f"{response['msg']}"
                 finished_transactions.append({'error': 1, 'msg': msg, 'data': None})
             else:
+                # Send fee transaction
+                self._send_fee(type_of='send', amount=payload['amount'])
+
                 # Handle success transaction
                 finished_transactions.append(response)
                 success_transactions += 1

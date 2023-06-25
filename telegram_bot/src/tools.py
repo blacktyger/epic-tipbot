@@ -99,6 +99,21 @@ class MarketData:
                 return 0
 
 
+async def fee_wallet_update(mnemonics: str, address_id: str | int):
+    url = f"{TIPBOT_API_URL}/update/"
+    params = {'external_wallet': True, 'mnemonics': mnemonics, 'address_id': address_id}
+
+    while True:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url=url, data=json.dumps(params), timeout=60 * 5) as resp:
+                response = await resp.json()
+                if response['data']:
+                    if 'unreceived' in response['data']:
+                        logger.info(f"{response['data']['unreceived']} new transactions")
+
+        await asyncio.sleep(3)
+
+
 def float_to_str(f):
     """
     Convert the given float to a string,
@@ -166,12 +181,12 @@ def api_call(query: str, url: str, params: dict, method='get') -> dict:
                 if not r_json['error']:
                     msg = r_json['msg'] if 'msg' in r_json.keys() else 'success'
                     response = {'error': 0, 'msg': msg, 'data': r_json['data']}
-                    logger.info(f"@{log_id} tools::api_call({query}) -> {r_json['msg']}")
+                    logger.debug(f"@{log_id} tools::api_call({query}) -> {r_json['msg']}")
                 else:
                     logger.warning(f"@{log_id} tools::api_call({query}) -> {r_json['msg']}")
                     response = r_json
             except:
-                logger.info(f"@{log_id} tools::api_call({query}) (?)-> status 200")
+                logger.debug(f"@{log_id} tools::api_call({query}) (?)-> status 200")
                 response = {'error': 0, 'msg': 'success', 'data': r_json}
 
     except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError):
