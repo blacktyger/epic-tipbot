@@ -22,6 +22,7 @@ class TelegramUserView(viewsets.ModelViewSet):
 
     """
     serializer_class = TelegramUserSerializer
+    http_method_names = ['get', 'head']
 
     def get_queryset(self):
         queryset = TelegramUser.objects.all()

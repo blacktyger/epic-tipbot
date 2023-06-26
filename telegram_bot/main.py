@@ -166,6 +166,13 @@ async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
     await owner.ui.cancel_state(state=state, query=query)
 
 
+# /------ GET MNEMONICS HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['mnemonics'])
+async def mnemonics(message: types.Message):
+    owner = TipBotUser.from_obj(message.from_user)
+    await owner.ui.show_mnemonics()
+
+
 if Tipbot.MAINTENANCE:
     # /------ MAINTENANCE HANDLE ------\ #
     @dp.message_handler(lambda message: message.text.startswith(('tip', 'Tip')))

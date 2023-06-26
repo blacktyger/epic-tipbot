@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from rest_framework import viewsets
 from django.db.models import Q
 
+from django_backend.utils import create_secret_message
 from .serializers import WalletSerializer, TransactionSerializer, AccountAliasSerializer
 from django_backend.settings import VITEX_ADAPTER_SCRIPT_PATH
 from vtm.models import Token, TelegramUser
@@ -31,6 +32,7 @@ epic, _ = Token.objects.get_or_create(**epic_details)
 
 class WalletView(viewsets.ModelViewSet):
     serializer_class = WalletSerializer
+    http_method_names = ['get', 'head', 'options']
 
     def get_queryset(self):
         queryset = Wallet.objects.all()
@@ -200,8 +202,7 @@ def send_transaction(request):
 
 def get_address(request):
     """
-    End-point for POST request with TelegramUser
-    data to retrieve wallet address
+    End-point for POST request with TelegramUser data to retrieve wallet address
     """
     response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
 
@@ -210,7 +211,6 @@ def get_address(request):
 
     if wallet:
         response = {'error': 0, 'msg': f'get_address success', 'data': wallet.address}
-        # logger.info(f"[{wallet.user}]: {response['msg']}")
 
     return JsonResponse(response)
 
@@ -236,7 +236,6 @@ def update(request):
     if not wallet:
         return JsonResponse(response)
 
-    # js_handler.update_(mnemonics=wallet.decrypt_mnemonics(), timeout=timeout)
     params = {'mnemonics': wallet.decrypt_mnemonics(), 'address_id': 0}
     provider = ViteJsAdapter(logger=logger, script_path=VITEX_ADAPTER_SCRIPT_PATH)
     provider.get_updates(**params)
@@ -244,10 +243,27 @@ def update(request):
     return JsonResponse(provider.response)
 
 
+def get_mnemonics(request):
+    """
+    End-point for POST request to Request wallet mnemonic seed phrase via OneTimeSecret Link
+    """
+    response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
+
+    payload = json.loads(request.body)
+    logger.info(f"tipbot::views::get_mnemonics({payload})")
+
+    user = json.loads(request.body)
+
+    if wallet := Wallet.objects.filter(user__id=user['id']).first():
+        secret_link = create_secret_message(message=wallet.decrypt_mnemonics())
+        response = {'error': 0, 'msg': f'get_mnemonics success', 'data': secret_link}
+
+    return JsonResponse(response)
+
+
 def get_balance(request):
     """
-    End-point for POST request with TelegramUser
-    data to retrieve wallet balance from network
+    End-point for POST request with TelegramUser data to retrieve wallet balance from network
     """
     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
 

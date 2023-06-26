@@ -15,7 +15,7 @@ from aiogram import types
 
 from .. import logger, bot, tools, Tipbot
 from ..wallet import AliasWallet
-from .screens import *
+from . import screens as screen
 
 
 # Wallet GUI buttons callback
@@ -23,9 +23,14 @@ wallet_cb = CallbackData('wallet', 'action', 'user', 'username')
 donate_cb = CallbackData('donate', 'action', 'amount')
 confirm_failed_tip_cb = CallbackData('failed_tip', 'action', 'user', 'message')
 
-scheduler = AsyncIOScheduler()
+try:
+    scheduler = AsyncIOScheduler()
+except:
+    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
+
 scheduler.start()
 MD = ParseMode.MARKDOWN
+HTML = ParseMode.HTML
 
 
 # Manage Wallet GUI states
@@ -71,10 +76,10 @@ class Interface:
         # Handle success creation
         else:
             display_wallet = False
-            msg = new_wallet_string(payload)
+            msg = screen.new_wallet_string(payload)
             media = types.MediaGroup()
             media.attach_photo(types.InputFile('static/tipbot_v2_banner.png'),
-                               caption=msg, parse_mode=ParseMode.HTML)
+                               caption=msg, parse_mode=HTML)
             await bot.send_media_group(media=media, chat_id=self.owner.id)
 
         if display_wallet: await self.show_wallet()
@@ -101,10 +106,10 @@ class Interface:
         # Handle account without wallet
         if not self.owner.wallet.address:
             # Display create wallet screen
-            gui = no_wallet()
+            gui = screen.no_wallet()
         else:
             # Display loading wallet GUI
-            gui = loading_wallet_1()
+            gui = screen.loading_wallet_1()
 
         wallet_gui = await self.send_message(text=gui, chat_id=self.owner.id, reply_markup=keyboard)
 
@@ -113,9 +118,9 @@ class Interface:
 
         # Show animation of loading
         while self.owner.wallet.is_updating:
-            await wallet_gui.edit_text(text=loading_wallet_2(), reply_markup=keyboard, parse_mode=MD)
+            await wallet_gui.edit_text(text=screen.loading_wallet_2(), reply_markup=keyboard, parse_mode=MD)
             await asyncio.sleep(0.15)
-            await wallet_gui.edit_text(text=loading_wallet_1(), reply_markup=keyboard, parse_mode=MD)
+            await wallet_gui.edit_text(text=screen.loading_wallet_1(), reply_markup=keyboard, parse_mode=MD)
             await asyncio.sleep(0.15)
 
         balance = self.owner.wallet.last_balance
@@ -123,9 +128,9 @@ class Interface:
         # Handle response error
         if 'error' in balance and balance['error']:
             if 'database' in balance['msg'].lower():
-                gui = connection_error_wallet()
+                gui = screen.connection_error_wallet()
             else:
-                gui = invalid_wallet()
+                gui = screen.invalid_wallet()
 
             # Update loading wallet GUI to error wallet
             await wallet_gui.edit_text(text=gui, reply_markup=keyboard, parse_mode=MD)
@@ -138,27 +143,39 @@ class Interface:
         if pending_txs:
             # Update wallet GUI with pending transactions number feedback
             logger.info(f"{self.owner.mention} pending transactions: {pending_txs}")
-            await wallet_gui.edit_text(text=pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
+            await wallet_gui.edit_text(text=screen.pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
 
             # Trigger the `receiveTransactions` vite api call
             thread = threading.Thread(target=self.owner.wallet.update_balance)
             thread.start()
 
             while self.owner.wallet.is_updating:
-                await wallet_gui.edit_text(text=pending_1(pending_txs), reply_markup=keyboard, parse_mode=MD)
+                await wallet_gui.edit_text(text=screen.pending_1(pending_txs), reply_markup=keyboard, parse_mode=MD)
                 await asyncio.sleep(0.7)
-                await wallet_gui.edit_text(text=pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
+                await wallet_gui.edit_text(text=screen.pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
                 await asyncio.sleep(0.7)
 
             balance = self.owner.wallet.epic_balance()
 
         # Prepare GUI strings
         epic_balance, balance_in_usd = balance['data']['string']
-        wallet_gui_string = ready_wallet(epic_balance, balance_in_usd)
+        wallet_gui_string = screen.ready_wallet(epic_balance, balance_in_usd)
 
         # Update loading wallet GUI to ready wallet
         await wallet_gui.edit_text(text=wallet_gui_string, reply_markup=keyboard, parse_mode=MD)
         logger.info(f"{self.owner.mention}: wallet GUI loaded")
+
+    async def show_mnemonics(self):
+        """Display link with the mnemonic seed phrase requested by the user"""
+        response = self.owner.wallet.get_mnemonics()
+
+        if response['error']:
+            text = f"🟡 There was a problem with your request."
+            await self.send_message(text=text, chat_id=self.owner.id, )
+            return
+
+        # Send link with the mnemonics to sender's private chat
+        await self.send_message(text=screen.mnemonics(response['data']), chat_id=self.owner.id, parse_mode=HTML)
 
     def get_receivers(self, message: types.Message) -> tuple:
         """
@@ -493,7 +510,7 @@ class Interface:
             logger.error(f"main::create_account_alias() -> {str(e)}")
             msg = f"🟡 New alias registration failed."
 
-        await self.send_message(text=msg, chat_id=message.chat.id, parse_mode=ParseMode.HTML)
+        await self.send_message(text=msg, chat_id=message.chat.id, parse_mode=HTML)
 
     async def alias_details(self, message: types.Message):
         # Parse user text and prepare params
@@ -525,7 +542,7 @@ class Interface:
         link = f"➡️  {alias.details['url'].replace('https://', '')}" if 'url' in alias.details else ''
 
         text = f"<b>{title}{separ}{value}</b>{pending}{owner}{link}"
-        await self.send_message(text=text, chat_id=message.chat.id, parse_mode=ParseMode.HTML, message=message)
+        await self.send_message(text=text, chat_id=message.chat.id, parse_mode=HTML, message=message)
 
     async def send_tip_cmd(self, message):
         """
@@ -637,7 +654,7 @@ class Interface:
                f"bot will be back online, apologies for inconvenience."
 
         await self.send_message(text=text, reply_markup=self.confirm_failed_tip_keyboard(),
-                                parse_mode=ParseMode.HTML, chat_id=message.chat.id, message=message)
+                                parse_mode=HTML, chat_id=message.chat.id, message=message)
 
         self.auto_delete(message, 20)
 
@@ -678,7 +695,7 @@ class Interface:
         text = f"💬️ {self.owner.mention}, {' '.join(message.text.split(' ')[1:-1])} is not a valid receiver."
 
         warning_message = await self.send_message(
-            text=text, chat_id=message.chat.id, parse_mode=ParseMode.HTML, reply_markup=self.confirm_failed_tip_keyboard(), message=message)
+            text=text, chat_id=message.chat.id, parse_mode=HTML, reply_markup=self.confirm_failed_tip_keyboard(), message=message)
 
         self.auto_delete(warning_message, 30)
 
@@ -687,14 +704,14 @@ class Interface:
         text = f"👋 <b>Hey {message.text.split(' ')[1]}</b>,\n{self.owner.mention} is trying to tip you!\n\n" \
                f" <b>Create your 📲 <a href='https://t.me/EpicTipBot'>EpicTipBot</a> Account</b>"
 
-        await self.send_message(text=text, chat_id=message.chat.id, parse_mode=ParseMode.HTML, message=message)
+        await self.send_message(text=text, chat_id=message.chat.id, parse_mode=HTML, message=message)
 
     async def tip_error_handler(self, message):
         await self.delete_message(message)
         text = f"💬️ {self.owner.mention}, there was problem with your tip \n\n<b>Visit 📲 <a href='https://t.me/EpicTipBot'>Wallet App</a></b>"
 
         await self.send_message(
-            text=text, reply_markup=self.confirm_failed_tip_keyboard(), parse_mode=ParseMode.HTML, chat_id=message.chat.id, message=message)
+            text=text, reply_markup=self.confirm_failed_tip_keyboard(), parse_mode=HTML, chat_id=message.chat.id, message=message)
 
     def home_keyboard(self) -> InlineKeyboardMarkup:
         """
@@ -782,7 +799,7 @@ class Interface:
         except Exception as e:
             # Change parse mode to HTML and try again
             logger.warning(f"{e} (chat_id: {kwargs['chat_id']})")
-            kwargs['parse_mode'] = ParseMode.HTML
+            kwargs['parse_mode'] = HTML
 
             try:
                 message = await bot.send_message(**kwargs)

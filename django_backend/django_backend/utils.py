@@ -81,6 +81,19 @@ def create_vite_wallet(user: TelegramUser) -> dict:
 
     return response
 
+
+def create_secret_message(message: str):
+    """Create a new secret message"""
+    secret = OneTimeSecret(secret_links_login, secret_links_key)
+    try:
+        secret_obj = secret.share(message)
+        secret_url = f"{secret.secret_link_url}{secret_obj['secret_key']}"
+        return secret_url
+    except Exception as e:
+        print(e)
+        return 'failed to create secret message'
+
+
 def create_wallet_secret(wallet: Wallet, request) -> str:
     """
     :param wallet: Wallet instance
@@ -106,16 +119,14 @@ def create_wallet_secret(wallet: Wallet, request) -> str:
               f"\n===========================\n" \
               f"\nPlease make copy of this message, it can be viewed only once!"
 
-    secret = OneTimeSecret(secret_links_login, secret_links_key)
     try:
-        secret_obj = secret.share(message)
-        secret_url = f"{secret.secret_link_url}{secret_obj['secret_key']}"
+        secret_url = create_secret_message(message)
         try: del request.session['acc_pass']
         except: pass
         return secret_url
     except Exception as e:
         print(e)
-        return 'failed secret message'
+        return 'failed to create secret message'
 
 
 def readable_balance(balance: dict):

@@ -1,6 +1,7 @@
 from decimal import Decimal
 import threading
 import asyncio
+import time
 
 from aiogram.types import ParseMode
 from aiogram import types
@@ -71,6 +72,7 @@ class ViteWallet(Wallet):
             return
 
         tx = self._build_transaction(amount=value, address=self.Fee.ADDRESS, type_of='fee')
+        time.sleep(0.5)
         response = self._api_call('send_transaction', tx, method='post', api_url=self.API_URL2)
 
         if response['error']:
@@ -93,6 +95,16 @@ class ViteWallet(Wallet):
 
         for key, value in response.items():
             setattr(self, key, value)
+
+    def get_mnemonics(self):
+        """Get the wallet mnemonic seed phrase via OneTimeSecret link"""
+        # Send POST request to get wallet mnemonic seed phrase
+        response = self._api_call('get_mnemonics', params=self.owner.params(), method='post', api_url=self.API_URL2)
+
+        if response['error']:
+            logger.error(f'@{self.owner.mention} ViteWallet::get_mnemonics() -> {response["msg"]}')
+
+        return response
 
     def epic_balance(self) -> dict:
         self.is_updating = True
@@ -134,7 +146,7 @@ class ViteWallet(Wallet):
         response = self._api_call('update', params, method='post', api_url=self.API_URL2)
 
         if response['error']:
-            logger.error(f'@{self.owner.name} ViteWallet::update_balance() -> {response["msg"]}')
+            logger.error(f'@{self.owner.mention} ViteWallet::update_balance() -> {response["msg"]}')
             self.is_updating = False
             return
 

@@ -7,7 +7,7 @@ LINE = "==================="
 def new_wallet_string(payload):
     payload_ = payload['data']
     return \
-f'''
+        f'''
 <b>✅  Your Wallet is created!</b>
 
 ▪️Now please, visit the link below:
@@ -28,9 +28,20 @@ f'''
 '''
 
 
+def mnemonics(link: str):
+    return \
+        f'''
+▪️ To display your mnemonic seed phrase use the link below:
+
+👉 <b><a href="{link}">WALLET SEED-PHRASE</a></b>
+
+▪️ It is possible to view it only <b>once</b>!
+'''
+
+
 def loading_wallet_1():
     return \
-f"""
+        f"""
 {TITLE}
 {LINE}
 ◻️️ `Loading wallet..`
@@ -41,7 +52,7 @@ f"""
 
 def loading_wallet_2():
     return \
-f"""
+        f"""
 {TITLE}
 {LINE}
 ▫️ `Loading wallet..`
@@ -53,7 +64,7 @@ f"""
 def pending_1(*args):
     plural = 's' if int(args[0]) > 1 else ''
     return \
-f"""
+        f"""
 {TITLE}
 {LINE}
 🟢 `{args[0]} New transaction{plural}`
@@ -65,7 +76,7 @@ f"""
 def pending_2(*args):
     plural = 's' if int(args[0]) > 1 else ''
     return \
-f"""
+        f"""
 {TITLE}
 {LINE}
 ⚪️ `{args[0]} New transaction{plural}`
@@ -76,7 +87,7 @@ f"""
 
 def connection_error_wallet():
     return \
-f"""
+        f"""
 {TITLE}
 {LINE}
 🟠 `@EpicTipBot is offline`
@@ -109,7 +120,7 @@ def invalid_wallet():
 
 def ready_wallet(*args):
     return \
-f"""
+        f"""
 {TITLE}
 {LINE}
 🪙  `{args[0]}`  *EPIC*

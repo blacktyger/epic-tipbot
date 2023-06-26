@@ -1,6 +1,7 @@
 COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot', 'Start', 'Help', ],
             'create': ['create', 'register', 'Create', ],
             'balance': ['balance', 'bal', 'Balance', ],
+            'mnemonics': ['get_mnemonics', 'Get_mnemonics', 'show_mnemonics', 'Show_mnemonics'],
             'address': ['address', 'deposit', 'Address', ],
             'history': ['history', 'transactions', ],
             'send': ['send', 'withdraw', ],
