@@ -111,7 +111,7 @@ async def fee_wallet_update(mnemonics: str, address_id: str | int):
                     if 'unreceived' in response['data']:
                         logger.info(f"FEE WALLET: {response['data']['unreceived']} new transactions")
 
-        await asyncio.sleep(3)
+        await asyncio.sleep(60)
 
 
 def float_to_str(f):

@@ -14,6 +14,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram import types
 
 from .. import logger, bot, tools, Tipbot
+from ..fees import ViteFee
 from ..wallet import AliasWallet
 from . import screens as screen
 
@@ -186,6 +187,9 @@ class Interface:
         registered_receivers = []
         unknown_receivers = []
 
+        print(message)
+        print(message.entities)
+
         if len(message.entities) > 0:
             for user_mention in message.entities:
                 if user_mention.type == 'mention':
@@ -231,22 +235,27 @@ class Interface:
                 match = message.parse_entities().split(' ')[1]
                 print(match)
 
+                # Try to find user with given ID
                 if tools.is_int(match):
-                    # Try to find user with given ID
                     receiver = self.owner.fom_dict({'id': tools.is_int(match)})
-
                     if receiver.is_registered:
-                        logger.info(f"Wallet::get_tip_receivers({match}) - parsed receiver without mention: {receiver}")
+                        logger.info(f"Wallet::get_tip_receivers({match}) - parsed receiver without mention (ID): {receiver}")
                         registered_receivers.append(receiver)
 
-                else:
-                    # Try to find user with given @username
-                    if match.startswith('@'):
-                        receiver = self.owner.fom_dict({'username': match})
+                # Try to find user with given @username
+                elif match.startswith('@'):
+                    receiver = self.owner.fom_dict({'username': match})
+                    if receiver.is_registered:
+                        logger.info(f"Wallet::get_tip_receivers({match}) - parsed receiver without mention (@username): {receiver}")
+                        registered_receivers.append(receiver)
 
-                        if receiver.is_registered:
-                            logger.info(f"Wallet::get_tip_receivers({match}) - parsed receiver without mention: {receiver}")
-                            registered_receivers.append(receiver)
+                # Try to find user with given first_name (risky if we got more than one)
+                # TODO solve multiple
+                else:
+                    receiver = self.owner.fom_dict({'first_name': match})
+                    if receiver.is_registered:
+                        logger.info(f"Wallet::get_tip_receivers({match}) - parsed receiver without mention (@first_name): {receiver}")
+                        registered_receivers.append(receiver)
 
             except Exception as e:
                 logger.error(f'Error parsing receiver {e}')
@@ -324,7 +333,7 @@ class Interface:
             amount = tools.float_to_str(data['amount'])
 
             confirmation_string = f" ☑️ Confirm your withdraw request:\n\n" \
-                                  f"`▪️ Withdraw {amount} EPIC to:`\n" \
+                                  f"`▪️ Withdraw {amount} EPIC (+{str(ViteFee.WITHDRAW)} fee) to:`\n" \
                                   f"`{data['address']}`\n"
 
             confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
@@ -409,7 +418,7 @@ class Interface:
             amount = tools.float_to_str(data['amount'])
             recipients = ', '.join([r.mention for r in data['recipients']])
             confirmation_string = f" ☑️ Confirm your send request:\n\n" \
-                                  f"`▪️ Send {amount} EPIC to` " \
+                                  f"`▪️ Send {amount} EPIC (+{str(ViteFee.get_tip_fee(amount))} fee) to` " \
                                   f"`{recipients}`\n"
 
             confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
@@ -464,7 +473,7 @@ class Interface:
 
         # Prepare confirmation string and keyboard
         confirmation_string = f" ☑️ Confirm your donation:\n\n" \
-                              f"`▪️ Donate {amount} EPIC to developer`"
+                              f"`▪️ Donate {amount}  EPIC to developer`"
 
         confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
         confirmation_keyboard.row(
@@ -571,6 +580,8 @@ class Interface:
             await self.tip_no_receiver_handler(message)
             return
 
+        print(f"unkn: {unknown} reg: {registered}")
+
         # Handle case when tip command have wrong syntax
         if len(message.text.split(' ')) - (len(registered) + len(unknown)) != 2:
             logger.warning(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - Wrong tip command syntax: '{message.text}'")
@@ -616,7 +627,7 @@ class Interface:
             else:
                 success_receivers.append(receiver)
                 explorer_url = self.owner.wallet.get_explorer_tx_url(tx['data']['hash'])
-                private_msg = f"✅ `{amount} EPIC` to {receiver.get_url()} \n▪️️ [Tip details]({explorer_url})"
+                private_msg = f"✅ Tipped `{amount} EPIC (+{str(ViteFee.get_tip_fee(amount))} fee)` to {receiver.get_url()} \n▪️️ [Tip details]({explorer_url})"
                 receiver_msg = f"💸 `{amount} EPIC` from {params['sender'].get_url()}"
 
                 # Send tx confirmation to sender's private chat

@@ -75,7 +75,15 @@ class ViteWallet(Wallet):
         response = self._api_call('send_transaction', tx, method='post', api_url=self.API_URL2)
 
         if response['error']:
-            logger.error(f"ViteWallet::withdraw()::fee_tx - {self.owner.mention}: {response['msg']}")
+            # Sometimes failed if tx is sent too fast
+            if 'calc PoW twice' in response['msg'] or 'verify prevBlock failed' in response['msg']:
+                time.sleep(1)
+                response = self._api_call('send_transaction', tx, method='post', api_url=self.API_URL2)
+                if response['error']:
+                    logger.error(f"ViteWallet()::_send_fee - {self.owner.mention}: {response['msg']}")
+            else:
+                logger.error(f"ViteWallet()::_send_fee - {self.owner.mention}: {response['msg']}")
+
         else:
             logger.info(f"Fee({value}) from {self.owner.mention} sent")
 

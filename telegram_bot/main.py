@@ -6,7 +6,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram import *
 import aiogram_cache
 
-from src.keys import FEE_SEED, ADDRESS_ID
+from src.keys import FEE_SEED, ADDRESS_ID, TOKEN
 from src.settings import Database, Tipbot
 from src import bot, logger, tools
 from src.commands import COMMANDS
@@ -254,12 +254,14 @@ async def on_startup(*args):
     """
     # Periodic task: save to temp storage EPIC vs USD market price
     asyncio.create_task(tools.MarketData().price_epic_vs(currency='USD'))
+    logger.info('Starting "EPIC USD" fetching price task')
 
     # Periodic task to update fee wallet
     asyncio.create_task(tools.fee_wallet_update(FEE_SEED, ADDRESS_ID))
+    logger.info('Starting updating fee_wallet task')
 
 
 # /------ START MAIN LOOP ------\ #
 if __name__ == '__main__':
-    logger.info("starting")
+    logger.info(f"Starting EpicTipBot({TOKEN.split(':')[0]})")
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
