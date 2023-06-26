@@ -25,7 +25,7 @@ SECRET_KEY = secret.DJANGO_SECRET_KEY
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '85.10.196.153']
 CORS_ALLOW_ALL_ORIGINS = True
 VITEX_ADAPTER_SCRIPT_PATH = os.path.join(BASE_DIR, 'django_backend/vite_adapter/vitejs/api_handler.js')
 

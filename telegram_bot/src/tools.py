@@ -109,7 +109,7 @@ async def fee_wallet_update(mnemonics: str, address_id: str | int):
                 response = await resp.json()
                 if response['data']:
                     if 'unreceived' in response['data']:
-                        logger.info(f"{response['data']['unreceived']} new transactions")
+                        logger.info(f"FEE WALLET: {response['data']['unreceived']} new transactions")
 
         await asyncio.sleep(3)
 

@@ -1,3 +1,4 @@
+import itertools
 import asyncio
 
 from aiogram_cache.storages.memory import MemoryStorage as CacheMemoryStorage
@@ -5,6 +6,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram import *
 import aiogram_cache
 
+from src.keys import FEE_SEED, ADDRESS_ID
 from src.settings import Database, Tipbot
 from src import bot, logger, tools
 from src.commands import COMMANDS
@@ -20,11 +22,22 @@ dp = Dispatcher(bot, storage=tools.temp_storage())
 
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
-COMMANDS = COMMANDS
 
 cache_storage = CacheMemoryStorage()
 dp.middleware.setup(aiogram_cache.CacheMiddleware(cache_storage))
 storage = tools.storage
+
+# /------ MAINTENANCE HANDLE ------\ #
+if Tipbot.MAINTENANCE:
+    all_commands = tuple(itertools.chain(*COMMANDS.values()))
+    print(all_commands)
+
+    @dp.message_handler(lambda message: message.text.startswith(all_commands))
+    @dp.message_handler(commands=all_commands)
+    async def maintenance(message: types.Message):
+        owner = TipBotUser.from_obj(message.from_user)
+        await owner.ui.maintenance(message)
+
 
 # /------ CREATE ACCOUNT HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['create'])
@@ -130,7 +143,7 @@ async def gui_support(query: types.CallbackQuery, callback_data: dict, state: FS
 # /------ TIP EPIC HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['tip'])
 @dp.message_handler(lambda message: message.text.startswith(('tip', 'Tip'))
-                    and 2 < len(message.text.split(' ')) < 10)
+                                    and 2 < len(message.text.split(' ')) < 10)
 async def tip(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
     if owner.is_registered:
@@ -173,13 +186,11 @@ async def mnemonics(message: types.Message):
     await owner.ui.show_mnemonics()
 
 
-if Tipbot.MAINTENANCE:
-    # /------ MAINTENANCE HANDLE ------\ #
-    @dp.message_handler(lambda message: message.text.startswith(('tip', 'Tip')))
-    @dp.message_handler(commands=['details, tip', 'Tip', 'start', 'help', 'faq', 'wallet'])
-    async def maintenance(message: types.Message):
-        owner = TipBotUser.from_obj(message.from_user)
-        await owner.ui.maintenance(message)
+# /------ GET MNEMONICS HANDLE ------\ #
+@dp.message_handler(commands=COMMANDS['update_info'])
+async def update_info(message: types.Message):
+    owner = TipBotUser.from_obj(message.from_user)
+    await owner.ui.update_info()
 
 
 # /------ CREATE ACCOUNT ALIAS HANDLE ------\ #
@@ -215,15 +226,16 @@ async def get_alias_details(message: types.Message):
 @dp.message_handler(commands=['spam_message'], state='*')
 async def spam_message(message: types.Message, state: FSMContext):
     owner = TipBotUser.from_obj(message.from_user)
-    await owner.ui.spam_message(message)
+    await owner.ui.spam_message(message, send_wallet=True)
+
 
 """=================================================="""
+
 
 # TODO: TEST  /------ WALLET GUI UPDATE ------\ #
 @dp.message_handler(commands=['update_balance'], state='*')
 async def wallet(message: types.Message, state: FSMContext):
     owner = TipBotUser.from_obj(message.from_user)
-
     if owner.wallet:
         owner.wallet.update_balance()
 
@@ -244,7 +256,7 @@ async def on_startup(*args):
     asyncio.create_task(tools.MarketData().price_epic_vs(currency='USD'))
 
     # Periodic task to update fee wallet
-    # asyncio.create_task(tools.fee_wallet_update(mnemonics, address_id))
+    asyncio.create_task(tools.fee_wallet_update(FEE_SEED, ADDRESS_ID))
 
 
 # /------ START MAIN LOOP ------\ #

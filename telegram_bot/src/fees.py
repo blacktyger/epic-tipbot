@@ -8,6 +8,8 @@ VITE EPIC-002 Token fees:
 """
 from decimal import *
 
+from .keys import FEE_ADDRESS
+
 
 ctx = getcontext()
 ctx.prec = 8
@@ -23,9 +25,12 @@ class ViteFee(Fee):
     """
     Fee class for the EpicTipBot Vite blockchain transactions
     """
-    ADDRESS = "vite_7693d3816ef70526faaf1b48922357835d2df8f5a8f95ede06"
-    WITHDRAW = Decimal('0.001').normalize(ctx)
+    ADDRESS = FEE_ADDRESS
+    WITHDRAW = Decimal('0.05').normalize(ctx)
     TIP = Decimal('0.01').normalize(ctx)
+
+    def fee_values(self):
+        return {"withdraw": self.WITHDRAW, 'tip': float(str(self.TIP)) * 100}
 
     @staticmethod
     def normalize(value: float | str | int | Decimal) -> Decimal:

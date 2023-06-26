@@ -27,6 +27,29 @@ def new_wallet_string(payload):
 
 '''
 
+def update_v_2_5():
+    return \
+        f"""
+☑️ <b>@EpicTipBot v2.5 Update List of Changes:</b>
+
+▪️ Migration to new, much faster, production server
+▪️ Adding transaction fees
+▪️ Adding option to request the seed phrase
+▪️ Minor fixes and improvements
+
+This update will introduce transactions fees used to cover constantly growing running costs of the project:
+
+👉 Deposits remain free
+👉 Withdrawals to other Vite wallets (i.e. Vite App) are charged 0.5 EPIC each
+👉 Tips are charged 1% of the transaction value
+
+From now users can also request mnemonic seed phrase of the @TipBotWallet, in order to get the OneTimeSecret link please click/tap
+
+👉 /get_mnemonics
+
+Have questions? Join @EpicTipBotSupport group!
+    """
+
 
 def mnemonics(link: str):
     return \

@@ -220,7 +220,6 @@ def update(request):
     End-point for POST request to receive wallet pendingTransactions
     """
     payload = json.loads(request.body)
-    logger.info(f"tipbot::views::get_update_balance({payload})")
 
     # Used to update non EpicTipBot wallets, requires mnemonics and address derivation id
     if 'external_wallet' in payload:
@@ -232,6 +231,7 @@ def update(request):
     wallet = Wallet.objects.filter(Q(user__id=payload['id']) |
                                    Q(address=payload['address'])).first()
     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
+    logger.info(f"tipbot::views::get_update_balance({payload})")
 
     if not wallet:
         return JsonResponse(response)

@@ -9,6 +9,7 @@ COMMANDS = {'start': ['start', 'help', 'help@epic_vitex_bot', 'help@EpicTipBot',
             'donation': ['donation', 'Donation', ],
             'tip': ['tip', 'Tip', 'TIP', ],
             'faq': ['faq', 'faq@EpicTipBot', 'Faq', ],
+            'update_info': ['update_info'],
             # GUI / Keyboards / includes
             'wallet': ['wallet', 'wallet@EpicTipBot', 'Wallet', ],
             'new_alias': ['add_alias', 'new_alias', ],

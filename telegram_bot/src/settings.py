@@ -1,5 +1,5 @@
 import random
-
+from .fees import ViteFee
 
 class Database:
     API_PORT = 3273
@@ -43,7 +43,7 @@ class Tests:
 
 
 class Tipbot:
-    MAINTENANCE = False
+    MAINTENANCE = True
     MAX_RECEIVERS = 5
     TIME_LOCK = 2.2
     ADMIN_ID = '803516752'
@@ -55,7 +55,7 @@ class Tipbot:
 To signup with new account:
 👉 /create
 
-▪️ You will receive one-time link with your wallet *seedphrase* and *Tip-Bot* account *password* - please save them somewhere safe! 
+▪️ You will receive one-time link with your wallet *seed phrase* and *Tip-Bot* account *password* - please save them somewhere safe! 
 
 ▪️ Now you can deposit Epic-Cash to your wallet from *Vite Mobile/Desktop or Web app*, more details at vite.org.
 
@@ -70,25 +70,21 @@ Need help? [@blacktyg3r](https://t.me/blacktyg3r)
 """
 
     FAQ_STRING = \
-        """
+        f"""
 ℹ️ *Epic Tip-Bot FAQ*
 
 👉 *What exactly is Tip-Bot Wallet?*
-▪️ It is fully functional wallet on VITE blockchain connected to your account.
+▪️ It is fully functional wallet on the VITE blockchain connected to your Telegram account.
 
 👉 *Do I need Vite app to use Tip Bot?*
 ▪️ You can start using Tip-Bot right away and receive tips, but to deposit or withdraw you will need [Vite wallet](https://app.vite.net/).
 
 👉 *How much does it cost?*
-▪️ Using Epic Tip-Bot is *free*, transactions are within a second and also *free* 🥳.
+▪️ Using Epic Tip-Bot is *free*, transactions have fees, withdraw to other Vite wallets: *{ViteFee().fee_values()['withdraw']} EPIC* and Tip/Send: *{ViteFee().fee_values()['tip']}%*.
 
 👉 *Is it safe?*
 ▪️ This is custodial solution, means software have access to your private keys. Although all security measures are in place, there is always risk of losing funds - *use only for low value operations and withdraw regularly!*
 
-👉 *What should I do with it?*
-▪️ Tip users you like, content creators, developers or just random people - it is entirely up to you!
-
 👉 *Can I send EPIC to someone without Tip-Bot account?*
 ▪️ You can also send/withdraw from your wallet to any valid VITE address (starting with `vite_...`).
-
 """

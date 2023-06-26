@@ -650,7 +650,7 @@ class Interface:
         await self.send_message(text=public_msg, chat_id=active_chat, message=message)
 
     async def maintenance(self, message):
-        text = f"⚙️ ⚠️ @EpicTipBot is under a maintenance, you will get notice via DM when " \
+        text = f"⚙️ ⚠️ @EpicTipBot is under a maintenance, you will get notice when " \
                f"bot will be back online, apologies for inconvenience."
 
         await self.send_message(text=text, reply_markup=self.confirm_failed_tip_keyboard(),
@@ -663,6 +663,10 @@ class Interface:
         confirm = message.text.split('"')[-1]
         print(msg, confirm)
 
+        if 'update' in msg:
+            msg = f"✅ <b>@EpicTipBot v2.5 Update is done!</b>" \
+                  f"\n\n For more details tap 👉 /update_info"
+
         button = KeyboardButton('/wallet')
         keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(button)
 
@@ -671,19 +675,22 @@ class Interface:
 
             users = [user['id'] for user in users]
             print(f"Got {len(users)} ID's from DB")
-            print(users[:10], users[-10:])
 
             if 'yes' not in confirm:
                 users = [self.owner.id]
 
             for user_id in users:
-                user = self.owner.from_dict({'id': user_id})
-                success = await self.send_message(text=msg, chat_id=user.id, reply_markup=keyboard)
-                if success:
-                    logger.critical(f"{user} spam message sent success")
+                try:
+                    user = self.owner.from_dict({'id': user_id})
                     if send_wallet:
                         await user.ui.show_wallet()
-                time.sleep(0.2)
+                    success = await self.send_message(text=msg, chat_id=user.id, reply_markup=keyboard, parse_mode=HTML)
+                    if success:
+                        logger.critical(f"{user} spam message sent success")
+                    time.sleep(0.2)
+                except Exception as e:
+                    logger.warning(e)
+                    continue
 
     def auto_delete(self, message, delta):
         """Add job to scheduler with time in seconds from now to run the task"""
@@ -776,6 +783,9 @@ class Interface:
         msg = f'🔘 Please join **@EpicTipBotSupport**'
         await self.send_message(text=msg, chat_id=self.owner.id)
         await query.answer()
+
+    async def update_info(self):
+        await self.send_message(text=screen.update_v_2_5(), chat_id=self.owner.id, parse_mode=HTML)
 
     @staticmethod
     async def send_message(**kwargs):

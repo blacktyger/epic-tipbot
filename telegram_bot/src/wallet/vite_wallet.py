@@ -66,7 +66,6 @@ class ViteWallet(Wallet):
                 return
 
             value = self.Fee.get_tip_fee(amount)
-            print(f"tip fee: {value}")
         else:
             logger.error(f"Invalid transaction type: {type_of}")
             return
