@@ -2,7 +2,7 @@
 	path = django_backend/django_backend/vite_adapter
 	url = https://github.com/blacktyger/vite_adapter
 
-[submodule "telegram_bot/src/wallets/epic"]
-	path = telegram_bot/src/wallets/epic
+[submodule "telegram_bot/src/wallets/epic/epic_py"]
+	path = telegram_bot/src/wallets/epic/epic_py
 	url = https://github.com/blacktyger/epic-py
 	branch = tipbot
