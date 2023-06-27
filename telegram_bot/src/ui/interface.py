@@ -1,4 +1,5 @@
 """ "Graphical Interface" for EpicTipBot Wallet in Telegram chat window"""
+import os
 from datetime import datetime, timedelta
 import threading
 import asyncio
@@ -61,29 +62,44 @@ class Interface:
         self.owner = user
         self.callback = CallbackData('wallet', 'action', 'user', 'username')
 
-    async def new_wallet(self, payload):
-        display_wallet = True
+    async def new_wallet(self, network: str, payload: dict = None) -> None:
+        if 'vite' in network:
+            display_wallet = True
 
-        # Handle error case
-        if payload['error']:
-            msg = f"🟡 {payload['msg']}"
-            await self.send_message(text=msg, chat_id=self.owner.id)
+            # Handle error case
+            if payload['error']:
+                msg = f"🟡 {payload['msg']}"
+                await self.send_message(text=msg, chat_id=self.owner.id)
 
-        # Handle already activated account
-        elif "already active" in payload['msg']:
-            msg = f"🟢 Your account is already active :)"
-            await self.send_message(text=msg, chat_id=self.owner.id)
+            # Handle already activated account
+            elif "already active" in payload['msg']:
+                msg = f"🟢 Your account is already active :)"
+                await self.send_message(text=msg, chat_id=self.owner.id)
 
-        # Handle success creation
-        else:
-            display_wallet = False
-            msg = screen.new_wallet_string(payload)
-            media = types.MediaGroup()
-            media.attach_photo(types.InputFile('static/tipbot_v2_banner.png'),
-                               caption=msg, parse_mode=HTML)
-            await bot.send_media_group(media=media, chat_id=self.owner.id)
+            # Handle success creation
+            else:
+                display_wallet = False
+                msg = screen.new_vite_wallet_string(payload)
+                media = types.MediaGroup()
+                media.attach_photo(types.InputFile('static/tipbot_v2_banner.png'),
+                                   caption=msg, parse_mode=HTML)
+                await bot.send_media_group(media=media, chat_id=self.owner.id)
 
-        if display_wallet: await self.show_wallet()
+            if display_wallet:
+                await self.show_wallet()
+
+        elif 'epic' in network:
+            name = f"wallet_{self.owner.id}"
+            wallets_dir = os.path.join(os.getcwd(), 'wallets')
+            node_address = "https://epic-radar.com/node"
+            wallet_data_directory = os.path.join(wallets_dir, name)
+            binary_path = "/home/blacktyger/epic-wallet/target/release"
+            password = "test_password"
+            wallet = self.owner.epic_wallet.create_new(
+                binary_path=binary_path, password=password, name=name, wallet_data_directory=wallet_data_directory, node_address=node_address)
+            print(wallet)
+
+            await self.send_message(text=f"Epic-Wallet created!\n\n{wallet.config.name}", chat_id=self.owner.id)
 
     async def show_wallet(self, state=None, message=None):
         """Spawn wallet interface inside Telegram chat window"""
@@ -105,7 +121,7 @@ class Interface:
             return
 
         # Handle account without wallet
-        if not self.owner.wallet.address:
+        if not self.owner.vite_wallet.address:
             # Display create wallet screen
             gui = screen.no_wallet()
         else:
@@ -115,16 +131,16 @@ class Interface:
         wallet_gui = await self.send_message(text=gui, chat_id=self.owner.id, reply_markup=keyboard)
 
         # Get wallet EPIC balance
-        threading.Thread(target=self.owner.wallet.epic_balance).start()
+        threading.Thread(target=self.owner.vite_wallet.epic_balance).start()
 
         # Show animation of loading
-        while self.owner.wallet.is_updating:
+        while self.owner.vite_wallet.is_updating:
             await wallet_gui.edit_text(text=screen.loading_wallet_2(), reply_markup=keyboard, parse_mode=MD)
             await asyncio.sleep(0.15)
             await wallet_gui.edit_text(text=screen.loading_wallet_1(), reply_markup=keyboard, parse_mode=MD)
             await asyncio.sleep(0.15)
 
-        balance = self.owner.wallet.last_balance
+        balance = self.owner.vite_wallet.last_balance
 
         # Handle response error
         if 'error' in balance and balance['error']:
@@ -147,16 +163,16 @@ class Interface:
             await wallet_gui.edit_text(text=screen.pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
 
             # Trigger the `receiveTransactions` vite api call
-            thread = threading.Thread(target=self.owner.wallet.update_balance)
+            thread = threading.Thread(target=self.owner.vite_wallet.update_balance)
             thread.start()
 
-            while self.owner.wallet.is_updating:
+            while self.owner.vite_wallet.is_updating:
                 await wallet_gui.edit_text(text=screen.pending_1(pending_txs), reply_markup=keyboard, parse_mode=MD)
                 await asyncio.sleep(0.7)
                 await wallet_gui.edit_text(text=screen.pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
                 await asyncio.sleep(0.7)
 
-            balance = self.owner.wallet.epic_balance()
+            balance = self.owner.vite_wallet.epic_balance()
 
         # Prepare GUI strings
         epic_balance, balance_in_usd = balance['data']['string']
@@ -168,7 +184,7 @@ class Interface:
 
     async def show_mnemonics(self):
         """Display link with the mnemonic seed phrase requested by the user"""
-        response = self.owner.wallet.get_mnemonics()
+        response = self.owner.vite_wallet.get_mnemonics()
 
         if response['error']:
             text = f"🟡 There was a problem with your request."
@@ -289,7 +305,7 @@ class Interface:
         address = message.text.strip()
 
         # Validate withdraw address and save to storage
-        if self.owner.wallet.is_valid_address(address):
+        if self.owner.vite_wallet.is_valid_address(address):
             await state.update_data(address=address)
 
             # Remove messages from previous state
@@ -593,7 +609,7 @@ class Interface:
         edited_message = await self.send_message(text=f"⌛️ {message.text}", chat_id=active_chat, message=message)
 
         # API Call to send tip transaction
-        response = await self.owner.wallet.send_tip(params, edited_message)
+        response = await self.owner.vite_wallet.send_tip(params, edited_message)
 
         # Handle response error
         if response['error']:
@@ -621,7 +637,7 @@ class Interface:
 
             else:
                 success_receivers.append(receiver)
-                explorer_url = self.owner.wallet.get_explorer_tx_url(tx['data']['hash'])
+                explorer_url = self.owner.vite_wallet.get_explorer_tx_url(tx['data']['hash'])
                 private_msg = f"✅ Tipped `{amount} EPIC (+{str(ViteFee.get_tip_fee(amount))} fee)` to {receiver.get_url()} \n▪️️ [Tip details]({explorer_url})"
                 receiver_msg = f"💸 `{amount} EPIC` from {params['sender'].get_url()}"
 
@@ -631,7 +647,7 @@ class Interface:
 
                 # Run threading process to update the receiver's balance
                 logger.warning(f"{receiver.mention} ViteWallet::gui::send_tip() - start balance update")
-                threading.Thread(target=receiver.wallet.update_balance).start()
+                threading.Thread(target=receiver.vite_wallet.update_balance).start()
 
                 if not params['receivers'][i].is_bot:
                     # Send notification to receiver's private chat

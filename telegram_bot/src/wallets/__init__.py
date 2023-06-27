@@ -1,5 +1,5 @@
-from .epic import Wallet as EpicWallet
-from .vite import AliasWallet
+from .epic import EpicWallet
 from .vite import ViteWallet
+from .vite import AliasWallet
 
 

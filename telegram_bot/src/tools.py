@@ -10,15 +10,15 @@ from aiogram.contrib.fsm_storage.files import PickleStorage
 import requests
 import aiohttp
 
-from .logger_ import logger
 from .settings import Database
-
+from .logger_ import logger
 
 ctx = decimal.Context()
 ctx.prec = 20
 API_PORT = Database.API_PORT
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
+
 
 
 class SimpleDatabase:

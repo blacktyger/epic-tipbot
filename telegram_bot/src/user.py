@@ -4,7 +4,7 @@ import random
 from aiogram.types import User
 
 from . import tools, logger, DJANGO_API_URL
-from .wallets import ViteWallet
+from .wallets import ViteWallet, EpicWallet
 from .settings import Tests
 from .ui import Interface
 
@@ -18,7 +18,8 @@ class TipBotUser(User):
     def __init__(self, is_registered: bool = False, **kwargs: typing.Any):
         super().__init__(**kwargs)
         self.is_registered = is_registered
-        self.wallet = ViteWallet(owner=self)
+        self.vite_wallet = ViteWallet(owner=self)
+        self.epic_wallet = EpicWallet(owner=self)
         self.ui = Interface(self)
 
         # temp_user is used to access some instance methods,
@@ -59,9 +60,9 @@ class TipBotUser(User):
             logger.info(f"@{self.name} TipBotUser::_update_to_db(users/create)")
             return self._api_call('users/create', self.params(), method='post')
 
-    def _get_wallet_from_db(self, address):
-        self.wallet.address = address
-        logger.info(f"@{self.name} TipBotUser::_get_wallet_from_db() -> {self.wallet}")
+    def _get_vite_wallet_from_db(self, address: str) -> None:
+        self.vite_wallet.address = address
+        logger.info(f"@{self.name} TipBotUser::_get_wallet_from_db() -> {self.vite_wallet}")
 
     def update_from_db(self):
         """
@@ -105,8 +106,11 @@ class TipBotUser(User):
 
                 # Handle Wallet object creation
                 if key == 'wallet':
-                    try: self._get_wallet_from_db(address=value[0])
-                    except Exception: pass
+                    print(value)
+                    try:
+                        self._get_vite_wallet_from_db(address=value[0])
+                    except Exception:
+                        pass
 
                 else:
                     # Handle data differences between database and user payload
@@ -163,7 +167,7 @@ class TipBotUser(User):
     @classmethod
     def get_user(cls, key_word):
         """Get user from database without ID"""
-        # Create temp user to access instance method (self)
+        # Create temp user to access class method (cls)
         temp_user = cls(id=545454, temp_user=True)
 
         # List of possible params to query with key_word

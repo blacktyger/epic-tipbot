@@ -4,7 +4,7 @@ TITLE = "  🤖 *TIP-BOT WALLET*"
 LINE = "==================="
 
 
-def new_wallet_string(payload):
+def new_vite_wallet_string(payload):
     payload_ = payload['data']
     return \
         f'''

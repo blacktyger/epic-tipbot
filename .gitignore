@@ -16,3 +16,4 @@ __pycache__/
 /telegram_bot/simple.db
 /telegram_bot/tipbot_storage.pickle
 /telegram_bot/src/keys.py
+/telegram_bot/wallets/
