@@ -6,16 +6,17 @@ from aiogram.dispatcher import FSMContext
 from aiogram import *
 import aiogram_cache
 
+from src.wallets.vite import faq_screen, welcome_screen
 from src.keys import FEE_SEED, ADDRESS_ID, TOKEN
 from src.settings import Database, Tipbot
 from src import bot, logger, tools
 from src.commands import COMMANDS
 from src.user import TipBotUser
-from src.wallet import *
 from src.ui import *
 
 
 __version__ = '2.5'
+
 
 # /------ AIOGRAM BOT SETTINGS ------\ #
 dp = Dispatcher(bot, storage=tools.temp_storage())
@@ -154,14 +155,14 @@ async def tip(message: types.Message):
 @dp.message_handler(commands=COMMANDS['start'])
 async def start(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
-    await vite_wallet.welcome_screen(user=owner, message=message)
+    await welcome_screen(user=owner, message=message)
 
 
 # /------ FAQ HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['faq'])
 async def faq(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
-    await vite_wallet.faq_screen(user=owner, message=message)
+    await faq_screen(user=owner, message=message)
 
 
 # /------ CONFIRM FAILED TIP ------\ #
@@ -186,7 +187,7 @@ async def mnemonics(message: types.Message):
     await owner.ui.show_mnemonics()
 
 
-# /------ GET MNEMONICS HANDLE ------\ #
+# /------ GET UPDATE INFO HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['update_info'])
 async def update_info(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
@@ -232,20 +233,20 @@ async def spam_message(message: types.Message, state: FSMContext):
 """=================================================="""
 
 
-# TODO: TEST  /------ WALLET GUI UPDATE ------\ #
-@dp.message_handler(commands=['update_balance'], state='*')
-async def wallet(message: types.Message, state: FSMContext):
-    owner = TipBotUser.from_obj(message.from_user)
-    if owner.wallet:
-        owner.wallet.update_balance()
-
-
-# TODO:  /------ TESTING ------\ #
-@dp.message_handler(commands=['msg'], state='*')
-async def tests(message: types.Message, state: FSMContext):
-    # print(message.entities)
-    owner = TipBotUser.from_obj(message.from_user)
-    await owner.ui.spam_message(message)
+# # TODO: TEST  /------ WALLET GUI UPDATE ------\ #
+# @dp.message_handler(commands=['update_balance'], state='*')
+# async def wallet(message: types.Message, state: FSMContext):
+#     owner = TipBotUser.from_obj(message.from_user)
+#     if owner.wallet:
+#         owner.wallet.update_balance()
+#
+#
+# # TODO:  /------ TESTING ------\ #
+# @dp.message_handler(commands=['msg'], state='*')
+# async def tests(message: types.Message, state: FSMContext):
+#     # print(message.entities)
+#     owner = TipBotUser.from_obj(message.from_user)
+#     await owner.ui.spam_message(message)
 
 
 async def on_startup(*args):

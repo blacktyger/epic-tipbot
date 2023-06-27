@@ -14,9 +14,9 @@ from aiogram.dispatcher import FSMContext
 from aiogram import types
 
 from .. import logger, bot, tools, Tipbot
-from ..fees import ViteFee
-from ..wallet import AliasWallet
+from ..wallets import AliasWallet
 from . import screens as screen
+from ..fees import ViteFee
 
 
 # Wallet GUI buttons callback
@@ -186,9 +186,6 @@ class Interface:
         """
         registered_receivers = []
         unknown_receivers = []
-
-        print(message)
-        print(message.entities)
 
         if len(message.entities) > 0:
             for user_mention in message.entities:
@@ -580,8 +577,6 @@ class Interface:
             await self.tip_no_receiver_handler(message)
             return
 
-        print(f"unkn: {unknown} reg: {registered}")
-
         # Handle case when tip command have wrong syntax
         if len(message.text.split(' ')) - (len(registered) + len(unknown)) != 2:
             logger.warning(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - Wrong tip command syntax: '{message.text}'")
@@ -690,14 +685,14 @@ class Interface:
             if 'yes' not in confirm:
                 users = [self.owner.id]
 
-            for user_id in users:
+            for i, user_id in enumerate(users):
                 try:
                     user = self.owner.from_dict({'id': user_id})
                     if send_wallet:
                         await user.ui.show_wallet()
                     success = await self.send_message(text=msg, chat_id=user.id, reply_markup=keyboard, parse_mode=HTML)
                     if success:
-                        logger.critical(f"{user} spam message sent success")
+                        logger.critical(f"[{i}] {user} spam message sent success")
                     time.sleep(0.2)
                 except Exception as e:
                     logger.warning(e)

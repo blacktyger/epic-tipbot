@@ -4,7 +4,7 @@ import random
 from aiogram.types import User
 
 from . import tools, logger, DJANGO_API_URL
-from .wallet import ViteWallet
+from .wallets import ViteWallet
 from .settings import Tests
 from .ui import Interface
 
