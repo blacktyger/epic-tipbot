@@ -12,6 +12,7 @@ class Wallet(models.Model):
     address = models.CharField(max_length=58, unique=True, primary_key=True)
     balance = models.JSONField(default=dict, null=True)
     mnemonics = models.TextField(max_length=2056, blank=True, null=True)
+    data = models.JSONField(default=dict, null=True)
 
     objects = models.Manager()
 
