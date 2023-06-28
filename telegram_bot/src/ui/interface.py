@@ -1,5 +1,4 @@
 """ "Graphical Interface" for EpicTipBot Wallet in Telegram chat window"""
-import os
 from datetime import datetime, timedelta
 import threading
 import asyncio
@@ -62,44 +61,42 @@ class Interface:
         self.owner = user
         self.callback = CallbackData('wallet', 'action', 'user', 'username')
 
-    async def new_wallet(self, network: str, payload: dict = None) -> None:
+    async def new_wallet(self, network, payload: dict = None) -> None:
         if 'vite' in network:
             display_wallet = True
 
             # Handle error case
             if payload['error']:
-                msg = f"🟡 {payload['msg']}"
-                await self.send_message(text=msg, chat_id=self.owner.id)
+                text = f"🟡 {payload['msg']}"
+                await self.send_message(text=text, chat_id=self.owner.id)
 
             # Handle already activated account
             elif "already active" in payload['msg']:
-                msg = f"🟢 Your account is already active :)"
-                await self.send_message(text=msg, chat_id=self.owner.id)
+                text = f"🟢 Your account is already active :)"
+                await self.send_message(text=text, chat_id=self.owner.id)
 
             # Handle success creation
             else:
                 display_wallet = False
                 msg = screen.new_vite_wallet_string(payload)
                 media = types.MediaGroup()
-                media.attach_photo(types.InputFile('static/tipbot_v2_banner.png'),
-                                   caption=msg, parse_mode=HTML)
+                media.attach_photo(types.InputFile('static/tipbot_v2_banner.png'), caption=msg, parse_mode=HTML)
                 await bot.send_media_group(media=media, chat_id=self.owner.id)
 
             if display_wallet:
                 await self.show_wallet()
 
         elif 'epic' in network:
-            name = f"wallet_{self.owner.id}"
-            wallets_dir = os.path.join(os.getcwd(), 'wallets')
-            node_address = "https://epic-radar.com/node"
-            wallet_data_directory = os.path.join(wallets_dir, name)
-            binary_path = "/home/blacktyger/epic-wallet/target/release"
-            password = "test_password"
-            wallet = self.owner.epic_wallet.create_new(
-                binary_path=binary_path, password=password, name=name, wallet_data_directory=wallet_data_directory, node_address=node_address)
-            print(wallet)
+            # Show user notification
+            message = await self.send_message(text=f"⏳ Creating Epic-Wallet..", chat_id=self.owner.id)
+            response = self.owner.epic_wallet.create(name=f"wallet_{self.owner.id}")
 
-            await self.send_message(text=f"Epic-Wallet created!\n\n{wallet.config.name}", chat_id=self.owner.id)
+            if response['error']:
+                text = f"🟡 {response['msg']}"
+                await message.edit_text(text=text)
+                return
+
+            await message.edit_text(text=f"✅ *Epic-Wallet created!*", parse_mode=MD)
 
     async def show_wallet(self, state=None, message=None):
         """Spawn wallet interface inside Telegram chat window"""

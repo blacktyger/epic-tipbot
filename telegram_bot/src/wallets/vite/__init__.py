@@ -22,7 +22,7 @@ class ViteWallet:
     LOW_BALANCE_MSG = f"🟡 Insufficient balance"
     API_URL1 = DJANGO_API_URL
     API_URL2 = TIPBOT_API_URL
-    NETWORK = settings.Network.VITE.name
+    NETWORK = settings.VITE.name
     Fee = fees.ViteFee
 
     def __init__(self, owner: Any, address: str = None):

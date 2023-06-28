@@ -1,3 +1,4 @@
+import os
 import random
 from .fees import ViteFee
 
@@ -7,20 +8,21 @@ class Database:
     API_URL = f"http://127.0.0.1:{API_PORT}/api"
 
 
-class Network:
-    class VITE:
-        name = 'VITE'
-        symbol = 'VITE'
-        is_token = True
-        is_native = False
-        fee = 0
+class VITE:
+    name = 'VITE'
+    symbol = 'VITE'
+    is_token = True
+    is_native = False
 
-    class EPIC:
-        name = 'EPIC-CASH'
-        symbol = 'EPIC'
-        is_token = False
-        is_native = True
-        fee = 0.007
+class EPIC:
+    name = 'EPIC'
+    symbol = 'EPIC'
+    is_token = False
+    is_native = True
+    password = "test_password"
+    wallets_dir = os.path.join(os.getcwd(), 'wallets')
+    binary_file_path = "/home/blacktyger/epic-wallet/target/release/epic-wallet"
+    node_address = "https://epic-radar.com/node"
 
 
 class Tests:
