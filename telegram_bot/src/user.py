@@ -19,13 +19,13 @@ class TipBotUser(User):
         super().__init__(**kwargs)
         self.is_registered = is_registered
         self.vite_wallet = ViteWallet(owner=self)
-        self.epic_wallet = EpicWallet(owner=self)
         self.ui = Interface(self)
 
         # temp_user is used to access some instance methods,
         # in this case do not try to connect with database
         if 'temp_user' not in kwargs.keys():
             self.update_from_db()
+            self.epic_wallet = EpicWallet(owner=self)
 
     @property
     def name(self):
@@ -42,13 +42,11 @@ class TipBotUser(User):
     @staticmethod
     def from_dict(data: dict):
         """Create new object based on user dictionary"""
+        print(data)
         return TipBotUser(**data)
 
     def _api_call(self, query: str, params: dict, method='get') -> dict:
         return tools.api_call(query, self.API_URL, params, method)
-        #
-        # if response['error'] and 'database' in response['msg'].lower():
-        #     raise tools.DatabaseError(response['msg'])
 
     def params(self):
         """Return user obj dictionary"""
@@ -106,7 +104,6 @@ class TipBotUser(User):
 
                 # Handle Wallet object creation
                 if key == 'wallet':
-                    print(value)
                     try:
                         self._get_vite_wallet_from_db(address=value[0])
                     except Exception:
@@ -120,8 +117,7 @@ class TipBotUser(User):
 
                     if value_from_user and value_from_user != value_from_db:
                         need_update = True
-                        logger.warning(f"@{self.mention} TipBotUser::_update_from_db({key}) NEED UPDATE: "
-                                       f"(user): {getattr(self, key)} | (db): {value}")
+                        logger.warning(f"@{self.mention} TipBotUser::_update_from_db({key}) NEED UPDATE: {getattr(self, key)} | (db): {value}")
 
                     # Handle saving values from database to instance
                     else:

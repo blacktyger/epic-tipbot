@@ -501,6 +501,7 @@ class Interface:
         alias_title, address = message.text.split(' ')[1:3]
 
         try:
+            print(message.text.split('"')[1])
             details = eval(message.text.split('"')[1])
         except:
             details = {}
@@ -643,10 +644,10 @@ class Interface:
                     await self.send_message(text=private_msg, chat_id=params['sender'].id)
 
                 # Run threading process to update the receiver's balance
-                logger.warning(f"{receiver.mention} ViteWallet::gui::send_tip() - start balance update")
-                threading.Thread(target=receiver.vite_wallet.update_balance).start()
-
                 if not params['receivers'][i].is_bot:
+                    logger.warning(f"{receiver} ViteWallet::gui::send_tip() - start balance update")
+                    threading.Thread(target=receiver.vite_wallet.update_balance).start()
+
                     # Send notification to receiver's private chat
                     await self.send_message(text=receiver_msg, chat_id=receiver.id)
 

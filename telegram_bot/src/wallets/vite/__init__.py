@@ -333,7 +333,7 @@ class ViteWallet:
                 await state.finish()
                 await query.answer()
 
-            logger.critical(f"{self.owner.mention}: sent {amount} to {receiver.mention}")
+            logger.critical(f"{self.owner.mention}: sent {amount} to {receiver}")
 
             # Run threading process to update receiver balance (receiveTransactions call)
             logger.warning(f"{receiver.mention} ViteWallet::gui::send_to_users() - start balance update")
@@ -366,7 +366,7 @@ class ViteWallet:
 
             # Build and send tip transaction
             transaction = self._build_transaction(amount=payload['amount'], receiver=receiver, type_of='tip')
-            logger.critical(f"{self.owner.mention} ViteWallet::send_tip() ({payload['amount']} -> {receiver.mention})")
+            logger.critical(f"{self.owner.mention} ViteWallet::send_tip() ({payload['amount']} -> {receiver})")
             response = self._api_call('send_transaction', transaction, method='post', api_url=self.API_URL2)
 
             # Handle error from VITE network
