@@ -18,13 +18,13 @@ class TipBotUser(User):
     def __init__(self, is_registered: bool = False, **kwargs: typing.Any):
         super().__init__(**kwargs)
         self.is_registered = is_registered
-        self.vite_wallet = ViteWallet(owner=self)
         self.ui = Interface(self)
 
         # temp_user is used to access some instance methods,
         # in this case do not try to connect with database
         if 'temp_user' not in kwargs.keys():
             self.update_from_db()
+            self.vite_wallet = ViteWallet(owner=self)
             self.epic_wallet = EpicWallet(owner=self)
 
     @property

@@ -89,7 +89,7 @@ class Interface:
         elif 'epic' in network:
             # Show user notification
             message = await self.send_message(text=f"⏳ Creating Epic-Wallet..", chat_id=self.owner.id)
-            response = self.owner.epic_wallet.create(name=f"wallet_{self.owner.id}")
+            response = await self.owner.epic_wallet.create(name=f"wallet_{self.owner.id}")
 
             if response['error']:
                 text = f"🟡 {response['msg']}"

@@ -106,5 +106,6 @@ async def on_startup(*args):
 
 # /------ START MAIN LOOP ------\ #
 if __name__ == '__main__':
+    tools.delete_lock_files()
     logger.info(f"Starting EpicTipBot({TOKEN.split(':')[0]})")
     executor.start_polling(dp, skip_updates=True, on_startup=on_startup)

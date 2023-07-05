@@ -1,6 +1,8 @@
-import os
 import random
+import os
+
 from .fees import ViteFee
+
 
 class Database:
     API_PORT = 3273
