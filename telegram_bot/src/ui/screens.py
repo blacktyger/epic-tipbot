@@ -1,7 +1,180 @@
 """Long Telegram strings"""
 
 TITLE = "  🤖 *TIP-BOT WALLET*"
-LINE = "==================="
+LINE = "➖➖➖➖➖➖➖➖"
+
+VITE_T = "🔓 *VITE Blockchain*"
+EPIC_T = "🔐 *EPIC Blockchain*"
+
+
+def vite_loading_wallet_1():
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+◻️️ `Loading wallet..`
+
+{LINE}
+{EPIC_T}
+◻️️ `Loading wallet..`
+
+{LINE}
+"""
+
+
+def vite_loading_wallet_2():
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+▫️ `Loading wallet..`
+
+{LINE}
+{EPIC_T}
+▫️ `Loading wallet..`
+
+{LINE}
+"""
+
+def epic_loading_wallet_1(*args):
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+🪙  `{args[0]}`  *EPIC*
+💲  `{args[1]}` 
+{LINE}
+{EPIC_T}
+◻️️ `Loading wallet..`
+
+{LINE}
+"""
+
+
+def epic_loading_wallet_2(*args):
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+🪙  `{args[0]}`  *EPIC*
+💲  `{args[1]}` 
+{LINE}
+{EPIC_T}
+▫️ `Loading wallet..`
+
+{LINE}
+"""
+
+def vite_pending_1(*args):
+    plural = 's' if int(args[0]) > 1 else ''
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+🟢 `{args[0]} New transaction{plural}`
+`Updating balance.`
+{LINE}
+{EPIC_T}
+◻️️ `Loading wallet..`
+
+{LINE}
+"""
+
+
+def vite_pending_2(*args):
+    plural = 's' if int(args[0]) > 1 else ''
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+⚪️ `{args[0]} New transaction{plural}`
+`Updating balance..`
+{LINE}
+{EPIC_T}
+▫️ `Loading wallet..`
+
+{LINE}
+"""
+
+
+def connection_error_wallet():
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+🟠 `@EpicTipBot is offline`
+❔  Temporary connection issue
+{LINE}
+{EPIC_T}
+{LINE}
+"""
+
+
+def no_wallet():
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+ℹ️  `Create wallet first`
+👉 /create
+{LINE}
+{EPIC_T}
+{LINE}
+"""
+
+
+def invalid_wallet():
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+🟠️  `No wallet found`
+❔  @EpicTipBotSupport
+{LINE}
+{EPIC_T}
+{LINE}
+"""
+
+
+def ready_wallet(*args):
+    if isinstance(args[2], str) and 'Error' in args[2]:
+        epic_balance = f"🟡 `{args[2]}`"
+    else:
+        epic_balance = f"🪙  `{args[2]}`  *EPIC*"
+
+    return \
+        f"""
+{TITLE}
+{LINE}
+{VITE_T}
+🪙  `{args[0]}`  *EPIC*
+💲  `{args[1]}`                 
+{LINE}
+{EPIC_T}
+{epic_balance}
+💲  `{args[3]}`
+{LINE}
+"""
+
+
+def vite_mnemonics(link: str):
+    return \
+        f'''
+▪️ To display your mnemonic seed phrase use the link below:
+
+👉 <b><a href="{link}">WALLET SEED-PHRASE</a></b>
+
+▪️ It is possible to view it only <b>once</b>!
+'''
 
 
 def new_vite_wallet_string(payload):
@@ -49,104 +222,3 @@ From now users can also request mnemonic seed phrase of the @TipBotWallet, in or
 
 Have questions? Join @EpicTipBotSupport group!
     """
-
-
-def mnemonics(link: str):
-    return \
-        f'''
-▪️ To display your mnemonic seed phrase use the link below:
-
-👉 <b><a href="{link}">WALLET SEED-PHRASE</a></b>
-
-▪️ It is possible to view it only <b>once</b>!
-'''
-
-
-def loading_wallet_1():
-    return \
-        f"""
-{TITLE}
-{LINE}
-◻️️ `Loading wallet..`
-
-{LINE}
-"""
-
-
-def loading_wallet_2():
-    return \
-        f"""
-{TITLE}
-{LINE}
-▫️ `Loading wallet..`
-
-{LINE}
-"""
-
-
-def pending_1(*args):
-    plural = 's' if int(args[0]) > 1 else ''
-    return \
-        f"""
-{TITLE}
-{LINE}
-🟢 `{args[0]} New transaction{plural}`
-`Updating balance.`
-{LINE}
-"""
-
-
-def pending_2(*args):
-    plural = 's' if int(args[0]) > 1 else ''
-    return \
-        f"""
-{TITLE}
-{LINE}
-⚪️ `{args[0]} New transaction{plural}`
-`Updating balance..`
-{LINE}
-"""
-
-
-def connection_error_wallet():
-    return \
-        f"""
-{TITLE}
-{LINE}
-🟠 `@EpicTipBot is offline`
-❔  Temporary connection issue
-{LINE}
-"""
-
-
-def no_wallet():
-    return \
-        f"""
-{TITLE}
-{LINE}
-ℹ️  `Create wallet first`
-👉 /create
-{LINE}
-"""
-
-
-def invalid_wallet():
-    return \
-        f"""
-{TITLE}
-{LINE}
-🟠️  `No wallet found`
-❔  @EpicTipBotSupport
-{LINE}
-"""
-
-
-def ready_wallet(*args):
-    return \
-        f"""
-{TITLE}
-{LINE}
-🪙  `{args[0]}`  *EPIC*
-💲  `{args[1]}`                 
-{LINE}
-"""

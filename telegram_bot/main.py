@@ -6,6 +6,7 @@ from aiogram import *
 
 from src.wallets.vite import faq_screen, welcome_screen
 from src.keys import FEE_SEED, ADDRESS_ID, TOKEN
+from dev_tools import WithdrawWallet
 from src import logger, tools, dp
 from src.commands import COMMANDS
 from src.settings import Tipbot
@@ -18,6 +19,8 @@ import epic_handlers
 
 
 __version__ = '2.5'
+
+
 storage = tools.storage
 
 
@@ -38,7 +41,7 @@ if Tipbot.MAINTENANCE:
 async def create_account(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
     response = owner.register()
-    await owner.ui.new_wallet(netowrk='vite', payload=response)
+    await owner.ui.new_wallet(network='vite', payload=response)
 
 
 # /------ WALLET GUI HANDLE ------\ #
@@ -102,6 +105,9 @@ async def on_startup(*args):
     # Periodic task to update fee wallet
     asyncio.create_task(tools.fee_wallet_update(FEE_SEED, ADDRESS_ID))
     logger.info('Starting updating fee_wallet task')
+
+    # Run withdraw wallet instance updater
+    asyncio.create_task(WithdrawWallet().start_updater())
 
 
 # /------ START MAIN LOOP ------\ #

@@ -1,5 +1,6 @@
 """ "Graphical Interface" for EpicTipBot Wallet in Telegram chat window"""
 from datetime import datetime, timedelta
+from _decimal import Decimal
 import threading
 import asyncio
 import typing
@@ -8,12 +9,12 @@ import time
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ParseMode, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.exceptions import MessageToDeleteNotFound, MessageCantBeDeleted
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 from aiogram import types
 
-from .. import logger, bot, tools, Tipbot
+from .. import logger, bot, tools, Tipbot, scheduler
+from ..tools import storage
 from ..wallets import AliasWallet
 from . import screens as screen
 from ..fees import ViteFee
@@ -24,12 +25,7 @@ wallet_cb = CallbackData('wallet', 'action', 'user', 'username')
 donate_cb = CallbackData('donate', 'action', 'amount')
 confirm_failed_tip_cb = CallbackData('failed_tip', 'action', 'user', 'message')
 
-try:
-    scheduler = AsyncIOScheduler()
-except:
-    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
 
-scheduler.start()
 MD = ParseMode.MARKDOWN
 HTML = ParseMode.HTML
 
@@ -68,12 +64,12 @@ class Interface:
             # Handle error case
             if payload['error']:
                 text = f"🟡 {payload['msg']}"
-                await self.send_message(text=text, chat_id=self.owner.id)
+                await self.send_message(text=text)
 
             # Handle already activated account
             elif "already active" in payload['msg']:
                 text = f"🟢 Your account is already active :)"
-                await self.send_message(text=text, chat_id=self.owner.id)
+                await self.send_message(text=text)
 
             # Handle success creation
             else:
@@ -81,22 +77,25 @@ class Interface:
                 msg = screen.new_vite_wallet_string(payload)
                 media = types.MediaGroup()
                 media.attach_photo(types.InputFile('static/tipbot_v2_banner.png'), caption=msg, parse_mode=HTML)
-                await bot.send_media_group(media=media, chat_id=self.owner.id)
+                await bot.send_media_group(media=media)
 
             if display_wallet:
                 await self.show_wallet()
 
         elif 'epic' in network:
             # Show user notification
-            message = await self.send_message(text=f"⏳ Creating Epic-Wallet..", chat_id=self.owner.id)
+            message = await self.send_message(text=f"⏳ Creating Epic-Wallet..")
             response = await self.owner.epic_wallet.create(name=f"wallet_{self.owner.id}")
 
             if response['error']:
                 text = f"🟡 {response['msg']}"
-                await message.edit_text(text=text)
-                return
+                logger.error(text)
+                if 'Wallet already exists' in text:
+                    await message.edit_text(text=text)
+            else:
+                await message.edit_text(text=f"✅ *Epic-Wallet created!*", parse_mode=MD)
 
-            await message.edit_text(text=f"✅ *Epic-Wallet created!*", parse_mode=MD)
+            return response
 
     async def show_wallet(self, state=None, message=None):
         """Spawn wallet interface inside Telegram chat window"""
@@ -123,57 +122,76 @@ class Interface:
             gui = screen.no_wallet()
         else:
             # Display loading wallet GUI
-            gui = screen.loading_wallet_1()
+            gui = screen.vite_loading_wallet_1()
 
-        wallet_gui = await self.send_message(text=gui, chat_id=self.owner.id, reply_markup=keyboard)
+        wallet_gui = await self.send_message(text=gui, reply_markup=keyboard)
 
-        # Get wallet EPIC balance
+        # Get VITE and EPIC blockchain balances via threading
         threading.Thread(target=self.owner.vite_wallet.epic_balance).start()
+        threading.Thread(target=asyncio.run, args=(self.owner.epic_wallet.get_balance(), )).start()
 
-        # Show animation of loading
+        # VITE and EPIC balances loading
         while self.owner.vite_wallet.is_updating:
-            await wallet_gui.edit_text(text=screen.loading_wallet_2(), reply_markup=keyboard, parse_mode=MD)
+            await wallet_gui.edit_text(text=screen.vite_loading_wallet_2(), reply_markup=keyboard, parse_mode=MD)
             await asyncio.sleep(0.15)
-            await wallet_gui.edit_text(text=screen.loading_wallet_1(), reply_markup=keyboard, parse_mode=MD)
+            await wallet_gui.edit_text(text=screen.vite_loading_wallet_1(), reply_markup=keyboard, parse_mode=MD)
             await asyncio.sleep(0.15)
 
-        balance = self.owner.vite_wallet.last_balance
+        v_balance = self.owner.vite_wallet.last_balance
 
-        # Handle response error
-        if 'error' in balance and balance['error']:
-            if 'database' in balance['msg'].lower():
+        # Handle VITE response error
+        if 'error' in v_balance and v_balance['error']:
+            if 'database' in v_balance['msg'].lower():
                 gui = screen.connection_error_wallet()
             else:
                 gui = screen.invalid_wallet()
 
-            # Update loading wallet GUI to error wallet
+            # VITE: Update loading wallet to error wallet
             await wallet_gui.edit_text(text=gui, reply_markup=keyboard, parse_mode=MD)
-            logger.error(f"{self.owner.mention} interface::show_wallet() -> {balance['msg']}")
+            logger.error(f"{self.owner.mention} interface::show_wallet() -> {v_balance['msg']}")
             return
 
         # Handle case when wallet needs to update new transactions
-        pending_txs = int(balance['data']['pending'])
+        pending_txs = int(v_balance['data']['pending'])
 
         if pending_txs:
             # Update wallet GUI with pending transactions number feedback
             logger.info(f"{self.owner.mention} pending transactions: {pending_txs}")
-            await wallet_gui.edit_text(text=screen.pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
+            await wallet_gui.edit_text(text=screen.vite_pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
 
             # Trigger the `receiveTransactions` vite api call
-            thread = threading.Thread(target=self.owner.vite_wallet.update_balance)
-            thread.start()
+            threading.Thread(target=self.owner.vite_wallet.update_balance).start()
 
             while self.owner.vite_wallet.is_updating:
-                await wallet_gui.edit_text(text=screen.pending_1(pending_txs), reply_markup=keyboard, parse_mode=MD)
-                await asyncio.sleep(0.7)
-                await wallet_gui.edit_text(text=screen.pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
-                await asyncio.sleep(0.7)
+                await wallet_gui.edit_text(text=screen.vite_pending_1(pending_txs), reply_markup=keyboard, parse_mode=MD)
+                await asyncio.sleep(0.9)
+                await wallet_gui.edit_text(text=screen.vite_pending_2(pending_txs), reply_markup=keyboard, parse_mode=MD)
+                await asyncio.sleep(0.9)
 
-            balance = self.owner.vite_wallet.epic_balance()
+            v_balance = self.owner.vite_wallet.epic_balance()
 
-        # Prepare GUI strings
-        epic_balance, balance_in_usd = balance['data']['string']
-        wallet_gui_string = screen.ready_wallet(epic_balance, balance_in_usd)
+        # Prepare GUI strings for VITE
+        epic_balance, balance_in_usd = v_balance['data']['string']
+
+        # EPIC Blockchain wallet loading balance
+        while self.owner.epic_wallet.updating:
+            await wallet_gui.edit_text(text=screen.epic_loading_wallet_2(epic_balance, balance_in_usd), reply_markup=keyboard, parse_mode=MD)
+            await asyncio.sleep(0.15)
+            await wallet_gui.edit_text(text=screen.epic_loading_wallet_1(epic_balance, balance_in_usd), reply_markup=keyboard, parse_mode=MD)
+            await asyncio.sleep(0.15)
+
+        # EPIC Blockchain strings for GUI
+        e_balance = self.owner.epic_wallet._cached_balance
+        epic_vs_usd = storage.get(key='epic_vs_usd')
+
+        if e_balance:
+            e_in_usd = f"{round(Decimal(e_balance.amount_currently_spendable) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+            e_balance = e_balance.amount_currently_spendable
+        else:
+            e_in_usd = f""
+            e_balance = f"Wallet Error"
+
+        wallet_gui_string = screen.ready_wallet(epic_balance, balance_in_usd, e_balance, e_in_usd)
 
         # Update loading wallet GUI to ready wallet
         await wallet_gui.edit_text(text=wallet_gui_string, reply_markup=keyboard, parse_mode=MD)
@@ -185,11 +203,11 @@ class Interface:
 
         if response['error']:
             text = f"🟡 There was a problem with your request."
-            await self.send_message(text=text, chat_id=self.owner.id, )
+            await self.send_message(text=text, )
             return
 
         # Send link with the mnemonics to sender's private chat
-        await self.send_message(text=screen.mnemonics(response['data']), chat_id=self.owner.id, parse_mode=HTML)
+        await self.send_message(text=screen.vite_mnemonics(response['data']), parse_mode=HTML)
 
     def get_receivers(self, message: types.Message) -> tuple:
         """
@@ -313,14 +331,14 @@ class Interface:
 
             # Send message about amount
             text = '💵 How much to withdraw?'
-            ask_for_amount = await self.send_message(text=text, chat_id=self.owner.id, reply_markup=self.cancel_keyboard())
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
         else:
             # Remove messages from previous state
             await self.remove_state_messages(state)
 
             # Send invalid amount message
             text = '🔸 Invalid withdraw address, try again:'
-            ask_for_amount = await self.send_message(text=text, chat_id=self.owner.id, reply_markup=self.cancel_keyboard())
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
 
         # Save message to remove to temp storage
         await state.update_data(msg_ask_for_amount=ask_for_amount)
@@ -354,7 +372,7 @@ class Interface:
                 )
 
             # Send confirmation keyboard
-            confirmation = await self.send_message(text=confirmation_string, chat_id=self.owner.id, reply_markup=confirmation_keyboard)
+            confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
 
             # Save message to remove to temp storage
             await state.update_data(msg_confirmation=confirmation)
@@ -366,7 +384,7 @@ class Interface:
 
             # Send wrong amount message
             text = '🔸 Wrong amount, try again'
-            confirmation = await self.send_message(text=text, chat_id=self.owner.id)
+            confirmation = await self.send_message(text=text)
 
             # Save message to remove to temp storage
             await state.update_data(msg_confirmation=confirmation)
@@ -398,14 +416,14 @@ class Interface:
 
             # Send message about amount
             text = '💵 How much to send?'
-            ask_for_amount = await self.send_message(text=text, chat_id=self.owner.id, reply_markup=self.cancel_keyboard())
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
         else:
             # Remove messages from previous state
             await self.remove_state_messages(state)
 
             # Send invalid amount message
             text = '🔸 Invalid recipient, try again:'
-            ask_for_amount = await self.send_message(text=text, chat_id=self.owner.id, reply_markup=self.cancel_keyboard())
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
 
         # Save message to remove to temp storage
         await state.update_data(msg_ask_for_amount=ask_for_amount)
@@ -439,7 +457,7 @@ class Interface:
                 )
 
             # Send confirmation keyboard
-            confirmation = await self.send_message(text=confirmation_string, chat_id=self.owner.id, reply_markup=confirmation_keyboard)
+            confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
 
             # Save message to remove to temp storage
             await state.update_data(msg_confirmation=confirmation)
@@ -450,7 +468,7 @@ class Interface:
             logger.error(f"GUI::send_to_user_3_of_3() - amount {e}")
 
             # Send wrong amount message
-            confirmation = await self.send_message(text='🔸 Wrong amount, try again', chat_id=self.owner.id)
+            confirmation = await self.send_message(text='🔸 Wrong amount, try again')
 
             # Save message to remove to temp storage
             await state.update_data(msg_confirmation=confirmation)
@@ -461,7 +479,7 @@ class Interface:
 
         # Send message about amount
         text = '💵 How much you would like to donate?'
-        ask_for_amount = await self.send_message(text=text, chat_id=self.owner.id, reply_markup=self.donate_keyboard())
+        ask_for_amount = await self.send_message(text=text, reply_markup=self.donate_keyboard())
 
         # Save message to remove to temp storage
         await state.update_data(msg_ask_for_amount=ask_for_amount)
@@ -492,7 +510,7 @@ class Interface:
             )
 
         # Send confirmation keyboard
-        confirmation = await self.send_message(text=confirmation_string, chat_id=self.owner.id, reply_markup=confirmation_keyboard)
+        confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
 
         # Save message to remove to temp storage
         await state.update_data(msg_confirmation=confirmation)
@@ -612,7 +630,7 @@ class Interface:
         # Handle response error
         if response['error']:
             logger.error(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - {response['msg']}")
-            await self.send_message(text=f"🟡 {response['msg']}", chat_id=self.owner.id)
+            await self.send_message(text=f"🟡 {response['msg']}")
             await self.tip_error_handler(edited_message)
             return
 
@@ -801,20 +819,22 @@ class Interface:
 
     async def show_support(self, query):
         msg = f'🔘 Please join **@EpicTipBotSupport**'
-        await self.send_message(text=msg, chat_id=self.owner.id)
+        await self.send_message(text=msg)
         await query.answer()
 
     async def update_info(self):
-        await self.send_message(text=screen.update_v_2_5(), chat_id=self.owner.id, parse_mode=HTML)
+        await self.send_message(text=screen.update_v_2_5(), parse_mode=HTML)
 
-    @staticmethod
-    async def send_message(**kwargs):
+    async def send_message(self, **kwargs):
         """Helper function for sending messages from bot to TelegramUser"""
         if 'parse_mode' not in kwargs:
             kwargs['parse_mode'] = ParseMode.MARKDOWN
 
         if 'disable_web_page_preview' not in kwargs:
             kwargs['disable_web_page_preview'] = True
+
+        if 'chat_id' not in kwargs:
+            kwargs['chat_id'] = self.owner.id
 
         # If there is Message objects in kwargs, extract topic thread ID to reply in to it
         if 'message' in kwargs:

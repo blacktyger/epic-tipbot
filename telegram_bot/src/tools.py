@@ -36,7 +36,7 @@ class SimpleDatabase:
 storage = SimpleDatabase()
 
 
-def delete_lock_files(directory: str= None, filename: str = None):
+def delete_lock_files(directory: str = None, filename: str = None):
     if directory is None:
         directory = './wallets'
 
@@ -170,8 +170,10 @@ def api_call(query: str, url: str, params: dict, method='get') -> dict:
             break
 
     if not log_id:
-        try: log_id = params['sender']['id']
-        except: pass
+        try:
+            log_id = params['sender']['id']
+        except:
+            pass
 
     if not ping_server():
         response = {'error': 1, 'msg': f"Database Connection Error", 'data': None}
@@ -179,9 +181,9 @@ def api_call(query: str, url: str, params: dict, method='get') -> dict:
 
     try:
         if 'get' in method:
-            response = requests.get(url=full_url, params=params, timeout=60*5)
+            response = requests.get(url=full_url, params=params, timeout=60 * 5)
         else:  # 'post' in method
-            response = requests.post(url=full_url, data=json.dumps(params), timeout=60*5)
+            response = requests.post(url=full_url, data=json.dumps(params), timeout=60 * 5)
 
         if response.status_code != 200:
             logger.error(f'@{log_id} {full_url} | {response.status_code}')
@@ -234,7 +236,3 @@ def ping_server(timeout=1):
     else:
         s.close()
         return True
-
-
-class DatabaseError(Exception):
-    pass

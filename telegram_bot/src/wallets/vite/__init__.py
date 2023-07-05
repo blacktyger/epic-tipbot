@@ -132,7 +132,7 @@ class ViteWallet:
             return
 
         # database query
-        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
+        params = {'address': self.address, 'network': self.NETWORK, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
         response = self._api_call(query='wallets', params=params)
 
         if response['error']:
@@ -156,7 +156,7 @@ class ViteWallet:
         self.is_updating = True
 
         # Send POST request to get wallet balance from network
-        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
+        params = {'address': self.address, 'network': self.NETWORK, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
         balance = self._api_call('balance', params, method='post', api_url=self.API_URL2)
 
         if balance['error']:
@@ -188,7 +188,7 @@ class ViteWallet:
 
         # Send POST request to update wallet balance (receiveTransactions call)
         self.is_updating = True
-        params = {'address': self.address, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
+        params = {'address': self.address, 'network': self.NETWORK, 'id': self.owner.id, 'first_name': self.owner.first_name, 'username': self.owner.username}
         response = self._api_call('update', params, method='post', api_url=self.API_URL2)
 
         if response['error']:
@@ -388,7 +388,7 @@ class ViteWallet:
                 'error': 0, 'data': finished_transactions}
 
     async def show_deposit(self, query=None):
-        params = dict(id=self.owner.id, username=self.owner.username, first_name=self.owner.first_name)
+        params = {'id': self.owner.id, 'username': self.owner.username, 'first_name': self.owner.first_name, 'network': self.NETWORK}
         response = self._api_call('address', params, method='post', api_url=self.API_URL2)
 
         if not response['error']:
@@ -401,7 +401,7 @@ class ViteWallet:
             msg = f"🟡 Wallet error (deposit address)"
             logger.error(f"Wallet::show_deposit() - {self.owner.mention}: {response['msg']}")
 
-        await bot.send_message(text=msg, chat_id=self.owner.id, parse_mode=MD)
+        await self.owner.ui.send_message(text=msg, parse_mode=MD)
 
         # Handle proper Telegram Query closing
         if query:
