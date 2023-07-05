@@ -50,6 +50,12 @@ def get_or_create_vite_token(payload: dict) -> Token:
         id=payload['tokenId'], defaults=token_data)
     return token
 
+def encrypt_mnemonics(mnemonics: str, enc_key: bytes = encryption_key):
+    raw_mnemonics_string = mnemonics.lower()
+    raw_mnemonics_bytes = bytes(raw_mnemonics_string, 'utf-8')
+    encrypted_mnemonics_bytes = Fernet(enc_key).encrypt(raw_mnemonics_bytes)
+    return encrypted_mnemonics_bytes.decode('utf-8')
+
 
 def create_vite_wallet(user: TelegramUser) -> dict:
     """
@@ -64,10 +70,7 @@ def create_vite_wallet(user: TelegramUser) -> dict:
         response = {'error': 1, 'msg': new_wallet['msg'], 'data': None}
     else:
         # Encrypt mnemonics before storing in database
-        raw_mnemonics_string = new_wallet['data']['mnemonics'].lower()
-        raw_mnemonics_bytes = bytes(raw_mnemonics_string, 'utf-8')
-        encrypted_mnemonics_bytes = Fernet(encryption_key).encrypt(raw_mnemonics_bytes)
-        encrypted_mnemonics_string = encrypted_mnemonics_bytes.decode('utf-8')
+        encrypted_mnemonics_string = encrypt_mnemonics(new_wallet['data']['mnemonics'])
 
         if len(encrypted_mnemonics_string) < 292:
             response = {'error': 1, 'msg': 'Creating wallet error, please try again /create or contact @blacktyg3r', 'data': None}

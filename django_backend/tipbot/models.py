@@ -9,7 +9,7 @@ from vtm.models import Token
 class Wallet(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wallet')
     network = models.CharField(max_length=16, default='VITE')
-    address = models.CharField(max_length=58, unique=True, primary_key=True)
+    address = models.CharField(max_length=128, unique=True, primary_key=True)
     balance = models.JSONField(default=dict, null=True)
     mnemonics = models.TextField(max_length=2056, blank=True, null=True)
     data = models.JSONField(default=dict, null=True)

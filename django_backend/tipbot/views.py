@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from rest_framework import viewsets
 from django.db.models import Q
 
-from django_backend.utils import create_secret_message
+from django_backend import utils
 from .serializers import WalletSerializer, TransactionSerializer, AccountAliasSerializer
 from django_backend.settings import VITEX_ADAPTER_SCRIPT_PATH
 from vtm.models import Token, TelegramUser
@@ -52,6 +52,17 @@ class WalletView(viewsets.ModelViewSet):
         return queryset
 
 
+def save_wallet(request):
+    """Save EpicTipBot native chain wallets details in to db"""
+    if request.method == 'POST':
+        payload = json.loads(request.body.decode('utf-8'))
+        user = TelegramUser.objects.get(id=payload['user']['id'])
+        encrypted_mnemonics = utils.encrypt_mnemonics(payload['mnemonics'])
+        wallet = Wallet.objects.create(user=user, network=payload['network'], address=payload['address'], mnemonics=encrypted_mnemonics)
+
+        return JsonResponse({'error': 0, 'msg': 'wallet created successfully', 'data': wallet.address})
+
+
 class AccountAliasView(viewsets.ModelViewSet):
     serializer_class = AccountAliasSerializer
 
@@ -89,6 +100,13 @@ class TransactionView(viewsets.ModelViewSet):
 
         logger.info(f"[{username, id, address}]: get_transactions api call")
         return queryset.filter(status='success')
+
+
+def save_epic_transaction(request):
+    if request.method == 'POST':
+        payload = json.loads(request.body.decode('utf-8'))
+        print(payload)
+        user = TelegramUser.objects.get(id=payload['user']['id'])
 
 
 class AccountAliasCreateView(CreateView):
@@ -206,8 +224,8 @@ def get_address(request):
     """
     response = {'error': 1, 'msg': 'Wallet does not exists', 'data': None}
 
-    user = json.loads(request.body)
-    wallet = Wallet.objects.filter(user__id=user['id']).first()
+    payload = json.loads(request.body)
+    wallet = Wallet.objects.filter(user__id=payload['id'], network=payload['network']).first()
 
     if wallet:
         response = {'error': 0, 'msg': f'get_address success', 'data': wallet.address}
@@ -255,7 +273,7 @@ def get_mnemonics(request):
     user = json.loads(request.body)
 
     if wallet := Wallet.objects.filter(user__id=user['id']).first():
-        secret_link = create_secret_message(message=wallet.decrypt_mnemonics())
+        secret_link = utils.create_secret_message(message=wallet.decrypt_mnemonics())
         response = {'error': 0, 'msg': f'get_mnemonics success', 'data': secret_link}
 
     return JsonResponse(response)
@@ -268,14 +286,17 @@ def get_balance(request):
     response = {'error': 1, 'msg': 'invalid wallet', 'data': None}
 
     payload = json.loads(request.body)
+    print(payload)
     logger.info(f"tipbot::views::get_balance({payload})")
 
     if 'id' in payload:
-        wallet = Wallet.objects.filter(user__id=payload['id']).first()
+        wallet = Wallet.objects.filter(user__id=payload['id'], network=payload['network']).first()
     elif 'address' in payload:
-        wallet = Wallet.objects.filter(address=payload['address']).first()
+        wallet = Wallet.objects.filter(address=payload['address'], network=payload['network']).first()
     else:
         wallet = None
+
+
 
     if wallet:
         params = {'address': wallet.address}
