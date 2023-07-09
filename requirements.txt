@@ -65,3 +65,10 @@ asn1crypto~=1.5.1
 coincurve~=18.0.0
 pyperclip~=1.8.2
 killport~=1.2.0
+
+beautifulsoup4~=4.12.2
+soupsieve~=2.4.1
+gitdb~=4.0.10
+smmap~=5.0.0
+passpy~=1.0.2
+click~=8.1.3

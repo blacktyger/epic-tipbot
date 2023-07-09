@@ -23,7 +23,7 @@ class Wallet(models.Model):
         except Exception:
             return self.mnemonics
 
-    def readable_balance(self):
+    def readable_vite_balance(self):
         epic_id = 'tti_f370fadb275bc2a1a839c753'
 
         if self.balance and 'balanceInfoMap' in self.balance.keys() \
@@ -32,12 +32,23 @@ class Wallet(models.Model):
             epic = self.balance['balanceInfoMap'][epic_id]
             as_int = int(epic['balance'])
             decimals = epic['tokenInfo']['decimals']
-            return round((as_int / 10**decimals), 8)
+            return round((as_int / 10 ** decimals), 8)
         else:
             return 0.0
 
     def __str__(self):
-        return f"Wallet({self.user.mention} | {self.network} | {self.readable_balance()} EPIC)"
+        return f"Wallet({self.user.mention} | {self.network} | {self.readable_vite_balance()} EPIC)"
+
+
+class ListenerPort(models.Model):
+    """Helper class to manage owner_api ports to avoid collisions"""
+    port = models.IntegerField(unique=True, primary_key=True)
+    data = models.JSONField(default=dict, blank=True, null=True)
+
+    objects = models.Manager()
+
+    def __str__(self):
+        return f"ListenerPort({self.port})"
 
 
 class AccountAlias(models.Model):
@@ -50,15 +61,30 @@ class AccountAlias(models.Model):
     details = models.JSONField(default=dict, null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
+    objects = models.Manager()
+
     def __str__(self):
         return f"#{self.title}({self.address[0:8]}...{self.address[-4:]})"
+
+
+class Coin(models.Model):
+    name = models.CharField(max_length=20, default="Epic-Cash")
+    symbol = models.CharField(max_length=10, default='EPIC', unique=True, primary_key=True)
+    network = models.CharField(max_length=16, default='EPIC')
+    decimals = models.IntegerField(default=8)
+
+    objects = models.Manager()
+
+    def __str__(self):
+        return f"Coin({self.symbol})"
 
 class Transaction(models.Model):
     network = models.CharField(max_length=16, default='VITE')
     token = models.ForeignKey(Token, blank=True, null=True, on_delete=models.SET_NULL, related_name='token')
-    sender = models.ForeignKey(Wallet, null=True, on_delete=models.SET_NULL, related_name='sender_wallet')
+    coin = models.ForeignKey(Coin, blank=True, null=True, on_delete=models.SET_NULL, related_name='coin')
+    sender = models.ForeignKey(Wallet, blank=True, null=True, on_delete=models.SET_NULL, related_name='sender_wallet')
     receiver = models.ForeignKey(Wallet, blank=True, null=True, on_delete=models.SET_NULL, related_name='receiver_wallet')
-    address = models.CharField(max_length=58, null=True, blank=True)
+    address = models.CharField(max_length=256, null=True, blank=True)
     amount = models.DecimalField(decimal_places=8, max_digits=32, null=True)
     type_of = models.CharField(max_length=16, null=True, blank=True)
     status = models.CharField(max_length=10, default='pending')
@@ -69,10 +95,12 @@ class Transaction(models.Model):
     objects = models.Manager()
 
     class Meta:
-        ordering = ('-timestamp', )
+        ordering = ('-timestamp',)
 
     def logs_repr(self):
-        return f"Transaction({self.network} | {self.amount} {self.token.symbol} | " \
+        asset = self.token if self.token else self.coin
+
+        return f"Transaction({self.network} | {self.amount} {asset.symbol} | " \
                f"{self.sender.user.mention if self.sender else ''} to --> " \
                f"{self.receiver.user.mention if self.receiver else self.address} |" \
                f" {self.type_of} | {self.status})"

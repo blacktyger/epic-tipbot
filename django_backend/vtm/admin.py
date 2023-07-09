@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Subscription, TelegramUser, TelegramMessage, ViteAccountEvent, Token, ViteUnreceivedAccountEvent
+from .models import *
 
 
 admin.site.register((TelegramUser, Subscription, TelegramMessage, ViteAccountEvent, Token, ViteUnreceivedAccountEvent))

@@ -18,6 +18,9 @@ def get_or_create_telegram_user(request) -> tuple:
     payload = json.loads(request.body)
     exists = TelegramUser.objects.filter(id=payload['id'])
 
+    if 'mention' in payload:
+        payload['mention'].delete()
+
     # Handle creating new user, generate password
     if not exists:
         payload['password'] = TelegramUser.objects.make_random_password()

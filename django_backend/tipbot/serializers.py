@@ -9,11 +9,15 @@ class WalletSerializer(serializers.ModelSerializer):
         fields = ('user', 'address', 'balance')
 
 
-class TransactionSerializer(serializers.ModelSerializer):
+class ViteTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ('sender', 'receiver', 'address', 'amount', 'token', 'status', 'data')
+        fields = ('sender', 'receiver', 'address', 'amount', 'token', 'status', 'message', 'data')
 
+class EpicTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ('sender', 'receiver', 'address', 'amount', 'status', 'message', 'coin', 'data')
 
 class AccountAliasSerializer(serializers.ModelSerializer):
     class Meta:
