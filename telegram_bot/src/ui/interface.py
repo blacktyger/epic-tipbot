@@ -291,7 +291,7 @@ class Interface:
         return registered_receivers, unknown_receivers
 
     @staticmethod
-    def get_amount(message: types.Message) -> typing.Union[float, None]:
+    def get_amount(message: types.Message) -> float | None:
         """
         Parse amount from user's messages
         :param message: types.Message (AIOGRAM)
@@ -302,6 +302,20 @@ class Interface:
                 return tools.is_float(match)
             else:
                 continue
+        return None
+
+    @staticmethod
+    def get_address(message: types.Message) -> str | None:
+        """
+        Parse epicbox address from user's messages
+        :param message: types.Message (AIOGRAM)
+        :return: float or None
+        """
+        for match in message.text.split(' '):
+            match = match
+            if match.strip().lower().startswith('es') and '@epicbox' in match:
+                return match.strip()
+
         return None
 
     async def withdraw_1_of_3(self, state, query):
@@ -406,7 +420,7 @@ class Interface:
         recipients, unknown = self.get_receivers(message)
 
         if recipients:
-            await state.update_data(recipients=recipients)
+            await state.update_data(recipients=recipients[0].params())
 
             # Remove messages from previous state
             await self.remove_state_messages(state)
@@ -442,13 +456,11 @@ class Interface:
 
             # Set new state
             await SendStates.confirmation.set()
+
             data = await state.get_data()
             amount = tools.float_to_str(data['amount'])
-            recipients = ', '.join([r.mention for r in data['recipients']])
-            confirmation_string = f" ☑️ Confirm your send request:\n\n" \
-                                  f"`▪️ Send {amount} EPIC (+{str(ViteFee.get_tip_fee(amount))} fee) to` " \
-                                  f"`{recipients}`\n"
-
+            confirmation_string = \
+                f"☑️ Confirm your send request:\n\n`▪️ Send {amount} EPIC (+{str(ViteFee.get_tip_fee(amount))} fee) to {data['recipients']['mention']}`"
             confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
 
             confirmation_keyboard.row(
@@ -875,14 +887,18 @@ class Interface:
         state_ = await state.get_state()
 
         if state_:
-            data = await state.get_data()
+            try:
+                data = await state.get_data()
+                # Remove messages
+                if f'msg_{state_.split(":")[-1]}' in data.keys():
+                    msg = data[f'msg_{state_.split(":")[-1]}']
+                    try:
+                        logger.info(f"DELETE MSG: {msg['id']}")
+                    except Exception:
+                        pass
 
-            # Remove messages
-            if f'msg_{state_.split(":")[-1]}' in data.keys():
-                msg = data[f'msg_{state_.split(":")[-1]}']
-                try:
-                    logger.info(f"DELETE MSG: {msg['id']}")
-                except Exception:
-                    pass
+                    await self.delete_message(msg)
+            except Exception as e:
+                logger.warning(str(e))
+                pass
 
-                await self.delete_message(msg)

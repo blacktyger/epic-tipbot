@@ -42,7 +42,6 @@ class TipBotUser(User):
     @staticmethod
     def from_dict(data: dict):
         """Create new object based on user dictionary"""
-        print(data)
         return TipBotUser(**data)
 
     def _api_call(self, query: str, params: dict, method='get') -> dict:
@@ -50,7 +49,10 @@ class TipBotUser(User):
 
     def params(self):
         """Return user obj dictionary"""
-        return self.__dict__['_values']
+        params_ = self.__dict__['_values']
+        params_['mention'] = self.mention
+
+        return params_
 
     def _update_to_db(self):
         """Update database with values from user obj, ID required"""
@@ -131,7 +133,6 @@ class TipBotUser(User):
         """
         Handle Database API calls to create or update TipBot User
         """
-
         if 'id' not in self.params().keys():
             response = {'error': 1, 'msg': f'No user_id', 'data': None}
 

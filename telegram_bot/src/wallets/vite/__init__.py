@@ -145,7 +145,8 @@ class ViteWallet:
     def get_mnemonics(self):
         """Get the wallet mnemonic seed phrase via OneTimeSecret link"""
         # Send POST request to get wallet mnemonic seed phrase
-        response = self._api_call('get_mnemonics', params=self.owner.params(), method='post', api_url=self.API_URL2)
+        params = {'user': self.owner.params(), 'network': self.NETWORK}
+        response = self._api_call('get_mnemonics', params=params, method='post', api_url=self.API_URL2)
 
         if response['error']:
             logger.error(f'@{self.owner.mention} ViteWallet::get_mnemonics() -> {response["msg"]}')
@@ -274,70 +275,63 @@ class ViteWallet:
         data = await state.get_data()
         logger.info(f"ViteWallet::send_to_user() - receiver data: {data['recipients']}")
 
+        receiver = self.owner.from_dict(data=data['recipients'])
+
         # Remove keyboard and display processing msg
         conf_msg = f"⏳ Processing transaction.."
         await data['msg_confirmation'].edit_text(text=conf_msg, reply_markup=None, parse_mode=MD)
 
-        for i, receiver in enumerate(data['recipients']):
-            # Consider anti-spam transaction lock
-            if i > 0:
-                await asyncio.sleep(settings.Tipbot.TIME_LOCK)
+        # Build and send transaction
+        transaction = self._build_transaction(amount=data['amount'], receiver=receiver, type_of='send')
+        response = self._api_call('send_transaction', transaction, method='post', api_url=self.API_URL2)
 
-            # Build and send transaction
-            transaction = self._build_transaction(amount=data['amount'], receiver=receiver, type_of='send')
-            response = self._api_call('send_transaction', transaction, method='post', api_url=self.API_URL2)
+        # Handle error case
+        if response['error']:
+            if 'no account' in response['msg']:
+                msg = f"🟡 @{data['recipient']['username']} have no Tip-Bot account yet."
+            elif 'sendBlock.Height must be larger than 1' in response['msg']:
+                msg = f"🟡 Insufficient balance."
+            else:
+                msg = f"🟡 {response['msg']}"
 
-            # Handle error case
-            if response['error']:
-                if 'no account' in response['msg']:
-                    msg = f"🟡 @{data['recipient']['username']} have no Tip-Bot account yet."
-                elif 'sendBlock.Height must be larger than 1' in response['msg']:
-                    msg = f"🟡 Insufficient balance."
-                else:
-                    msg = f"🟡 {response['msg']}"
+            logger.error(f"ViteWallet::send() - {self.owner.mention}: {response['msg']}")
+            await self.owner.ui.send_message(text=msg, chat_id=self.owner.id)
+            await self.owner.ui.remove_state_messages(state)
+            await query.answer()
+            return
 
-                logger.error(f"ViteWallet::send() - {self.owner.mention}: {response['msg']}")
-                await self.owner.ui.send_message(text=msg, chat_id=self.owner.id)
-                await self.owner.ui.remove_state_messages(state)
-                await query.answer()
-                return
+        # Send fee transaction
+        self._send_fee(type_of='send', amount=data['amount'])
 
-            # Send fee transaction
-            self._send_fee(type_of='send', amount=data['amount'])
+        # Show user notification/alert
+        await self.owner.ui.remove_state_messages(state)
+        await query.answer(text='Transaction Confirmed!')
+        await asyncio.sleep(1)
 
-            # Remove messages from previous state only at first iteration
-            if i == 0:
-                # Show user notification/alert
-                await self.owner.ui.remove_state_messages(state)
-                await query.answer(text='Transaction Confirmed!')
-                await asyncio.sleep(1)
+        # Create Vitescan.io explorer link to transaction
+        transaction_hash = response['data']['hash']
+        explorer_url = self.get_explorer_tx_url(transaction_hash)
 
-            # Create Vitescan.io explorer link to transaction
-            transaction_hash = response['data']['hash']
-            explorer_url = self.get_explorer_tx_url(transaction_hash)
+        # Prepare user confirmation message
+        amount = tools.float_to_str(data['amount'])
+        private_msg = f"✅ Transaction sent successfully\n️️ [Transaction details (vitescan.io)]({explorer_url})"
+        receiver_msg = f"💸 `{amount} EPIC` from {self.owner.get_url()}"
 
-            # Prepare user confirmation message
-            amount = tools.float_to_str(data['amount'])
-            private_msg = f"✅ Transaction sent successfully\n️️ [Transaction details (vitescan.io)]({explorer_url})"
-            receiver_msg = f"💸 `{amount} EPIC` from {self.owner.get_url()}"
+        # Send tx confirmation to sender's private chat
+        await self.owner.ui.send_message(text=private_msg, chat_id=self.owner.id)
 
-            # Send tx confirmation to sender's private chat
-            await self.owner.ui.send_message(text=private_msg, chat_id=self.owner.id)
+        # Send notification to receiver's private chat
+        if not receiver.is_bot:
+            await self.owner.ui.send_message(text=receiver_msg, chat_id=receiver.id)
 
-            # Send notification to receiver's private chat
-            if not receiver.is_bot:
-                await self.owner.ui.send_message(text=receiver_msg, chat_id=receiver.id)
+        await query.answer()
+        await state.finish()
 
-            # Finish send state when last element from list
-            if i + 1 == len(data['recipients']):
-                await state.finish()
-                await query.answer()
+        logger.critical(f"{self.owner.mention}: sent {amount} to {receiver}")
 
-            logger.critical(f"{self.owner.mention}: sent {amount} to {receiver}")
-
-            # Run threading process to update receiver balance (receiveTransactions call)
-            logger.warning(f"{receiver.mention} ViteWallet::gui::send_to_users() - start balance update")
-            threading.Thread(target=receiver.wallet.update_balance).run()
+        # Run threading process to update receiver balance (receiveTransactions call)
+        logger.warning(f"{receiver.mention} ViteWallet::gui::send_to_users() - start balance update")
+        threading.Thread(target=receiver.vite_wallet.update_balance).run()
 
     async def send_tip(self, payload: dict, message):
         finished_transactions = []

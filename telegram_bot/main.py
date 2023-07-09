@@ -21,9 +21,6 @@ import epic_handlers
 __version__ = '2.5'
 
 
-storage = tools.storage
-
-
 # /------ MAINTENANCE HANDLE ------\ #
 if Tipbot.MAINTENANCE:
     all_commands = tuple(itertools.chain(*COMMANDS.values()))
@@ -106,7 +103,7 @@ async def on_startup(*args):
     asyncio.create_task(tools.fee_wallet_update(FEE_SEED, ADDRESS_ID))
     logger.info('Starting updating fee_wallet task')
 
-    # Run withdraw wallet instance updater
+    # # Run withdraw wallet instance updater
     asyncio.create_task(WithdrawWallet().start_updater())
 
 

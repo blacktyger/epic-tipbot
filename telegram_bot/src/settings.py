@@ -1,6 +1,8 @@
 import random
 import os
 
+import tomlkit
+
 from .fees import ViteFee
 
 
@@ -19,12 +21,25 @@ class VITE:
 class EPIC:
     name = 'EPIC'
     symbol = 'EPIC'
+    network = 'EPIC'
     is_token = False
     is_native = True
     password = "test_password"
     wallets_dir = os.path.join(os.getcwd(), 'wallets')
     binary_file_path = "/home/blacktyger/epic-wallet/target/release/epic-wallet"
     node_address = "https://epic-radar.com/node"
+    withdraw_wallet_path = "/home/blacktyger/epic-tipbot/telegram_bot/wallets/wallet_WITHDRAW/config.toml"
+
+    def withdraw_address(self) -> str | None:
+        try:
+            with open(self.withdraw_wallet_path, 'rt', encoding="utf-8") as file:
+                settings_ = tomlkit.load(file)
+
+            print(settings_['epicbox_address'])
+            return settings_['epicbox_address']
+        except Exception as e:
+            print(str(e))
+            return
 
 
 class Tests:

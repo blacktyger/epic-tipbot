@@ -1,6 +1,7 @@
 from json import JSONDecodeError
 import asyncio
 import decimal
+import random
 import shelve
 import socket
 import json
@@ -10,14 +11,16 @@ from aiogram.contrib.fsm_storage.files import PickleStorage
 import requests
 import aiohttp
 
-from .settings import Database
+from .settings import Database, EPIC
 from .logger_ import logger
+
 
 ctx = decimal.Context()
 ctx.prec = 20
 API_PORT = Database.API_PORT
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
+owner_ports_file = os.path.join(EPIC.wallets_dir, '.owner_ports')
 
 
 class SimpleDatabase:
@@ -34,6 +37,35 @@ class SimpleDatabase:
 
 
 storage = SimpleDatabase()
+
+
+class PortManager:
+    api_url = f"{TIPBOT_API_URL}/ports/"
+    ports_range = (5000, 60000)
+
+    @staticmethod
+    def _is_port_in_use(port: int) -> bool:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('localhost', port)) == 0
+
+    def _get_random_port(self):
+        port_ = random.randint(self.ports_range[0], self.ports_range[1])
+
+        while self._is_port_in_use(port_):
+            port_ = random.randint(self.ports_range[0], self.ports_range[1])
+
+        return port_
+
+    def set_port(self):
+        port = self._get_random_port()
+        response = requests.post(url=self.api_url, json={'port': port}).json()
+
+        while response['error']:
+            print(response)
+            response = requests.post(url=self.api_url, json={'port': port}).json()
+
+        return response['data']
 
 
 def delete_lock_files(directory: str = None, filename: str = None):
@@ -55,12 +87,12 @@ def temp_storage():
     pickle_storage = "tipbot_storage.pickle"
 
     try:
-        storage = PickleStorage(pickle_storage)
+        storage_ = PickleStorage(pickle_storage)
     except EOFError:
         os.remove(pickle_storage)
-        storage = PickleStorage(pickle_storage)
+        storage_ = PickleStorage(pickle_storage)
 
-    return storage
+    return storage_
 
 
 class MarketData:
