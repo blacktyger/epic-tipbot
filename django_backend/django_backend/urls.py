@@ -22,6 +22,7 @@ urlpatterns = [
     path('tipbot/', include(tipbot_urls)),
     path('admin/', admin.site.urls),
     path('api/', include(vtm_urls)),
+    path('api/', include(tipbot_urls)),
     path('api/', include(router.urls)),
     re_path(r'epic/.*', api.urls),
 

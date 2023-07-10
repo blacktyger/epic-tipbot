@@ -36,16 +36,14 @@ class WalletView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Wallet.objects.all()
-        wallet_user = self.request.query_params.get('user')
-        wallet_address = self.request.query_params.get('address')
-        wallet_network = self.request.query_params.get('network')
+        print(self.request.query_params)
 
-        if wallet_user:
+        if wallet_user := self.request.query_params.get('user'):
             queryset = queryset.filter(Q(user__id=wallet_user) | Q(user__username__iexact=wallet_user), network=wallet_network)
-        if wallet_address:
-            queryset = queryset.filter(address=wallet_address, network=wallet_network)
-        if wallet_network:
+        if wallet_network := self.request.query_params.get('network'):
             queryset = queryset.filter(network=wallet_network)
+        if wallet_address := self.request.query_params.get('address'):
+            queryset = queryset.filter(address=wallet_address, network=wallet_network)
 
         return queryset
 
@@ -360,9 +358,7 @@ class AccountAliasView(viewsets.ModelViewSet):
 
 def ports(request):
     if request.method == 'GET':
-        port_ = request.GET.get('port', None)
-
-        if port_:
+        if port_ := request.GET.get('port', None):
             port = ListenerPort.objects.filter(port=port_).first()
 
             if port:

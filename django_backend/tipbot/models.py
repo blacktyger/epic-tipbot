@@ -100,7 +100,7 @@ class Transaction(models.Model):
     def logs_repr(self):
         asset = self.token if self.token else self.coin
 
-        return f"Transaction({self.network} | {self.amount} {asset.symbol} | " \
+        return f"Transaction({self.network} | {self.amount} {asset} | " \
                f"{self.sender.user.mention if self.sender else ''} to --> " \
                f"{self.receiver.user.mention if self.receiver else self.address} |" \
                f" {self.type_of} | {self.status})"
