@@ -4,14 +4,12 @@ import asyncio
 from aiogram.dispatcher import FSMContext
 from aiogram import *
 
-from src.wallets.vite import faq_screen, welcome_screen
 from src.keys import FEE_SEED, ADDRESS_ID, TOKEN
 from dev_tools import WithdrawWallet
-from src import logger, tools, dp
+from src import logger, tools, dp, database
 from src.commands import COMMANDS
 from src.settings import Tipbot
 from src.user import TipBotUser
-from src.ui import *
 
 # Import Handlers for Vite and Epic operations
 import vite_handlers
@@ -37,7 +35,7 @@ if Tipbot.MAINTENANCE:
 @dp.message_handler(commands=COMMANDS['create'])
 async def create_account(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
-    response = owner.register()
+    response = await owner.register()
     await owner.ui.new_wallet(network='vite', payload=response)
 
 
@@ -48,26 +46,18 @@ async def wallet(message: types.Message, state: FSMContext):
     await owner.ui.show_wallet(state=state, message=message)
 
 
-# /------ WALLET GUI SUPPORT ------\ #
-@dp.callback_query_handler(wallet_cb.filter(action='support'), state='*')
-async def gui_support(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
-    owner = TipBotUser(id=callback_data['user'])
-    print(owner)
-    await owner.ui.show_support(query=query)
-
-
 # /------ START/HELP HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['start'])
 async def start(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
-    await welcome_screen(user=owner, message=message)
+    await owner.ui.welcome_screen(user=owner, message=message)
 
 
 # /------ FAQ HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['faq'])
 async def faq(message: types.Message):
     owner = TipBotUser.from_obj(message.from_user)
-    await faq_screen(user=owner, message=message)
+    await owner.ui.faq_screen(user=owner, message=message)
 
 
 # /------ CANCEL ANY STATE HANDLE ------\ #
@@ -107,8 +97,14 @@ async def on_startup(*args):
     asyncio.create_task(WithdrawWallet().start_updater())
 
 
+async def on_shutdown(*args):
+    # Close Django database session
+    session = await database.get_client_session()
+    session.close()
+
+
 # /------ START MAIN LOOP ------\ #
 if __name__ == '__main__':
     tools.delete_lock_files()
     logger.info(f"Starting EpicTipBot({TOKEN.split(':')[0]})")
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup, on_shutdown=on_shutdown)

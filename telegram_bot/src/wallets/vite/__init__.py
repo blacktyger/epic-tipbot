@@ -5,9 +5,8 @@ import asyncio
 import time
 
 from aiogram.types import ParseMode
-from aiogram import types
 
-from ... import tools, logger, Tipbot, bot, settings, fees, DJANGO_API_URL, TIPBOT_API_URL
+from ... import tools, logger, settings, fees, DJANGO_API_URL, TIPBOT_API_URL
 
 
 MD = ParseMode.MARKDOWN
@@ -216,6 +215,10 @@ class ViteWallet:
         """Create VITE explorer transaction URL"""
         return f"https://vitescan.io/tx/{tx_hash}"
 
+    def deposit(self):
+        params = {'id': self.owner.id, 'username': self.owner.username, 'first_name': self.owner.first_name, 'network': self.NETWORK}
+        return self._api_call('address', params, method='post', api_url=self.API_URL2)
+
     async def withdraw(self, state, query):
         """Used to withdraw to VITE address"""
         # Remove keyboard and display processing msg
@@ -381,26 +384,6 @@ class ViteWallet:
         return {'msg': f'send_tip success: {success_transactions}/{len(payload["receivers"])}',
                 'error': 0, 'data': finished_transactions}
 
-    async def show_deposit(self, query=None):
-        params = {'id': self.owner.id, 'username': self.owner.username, 'first_name': self.owner.first_name, 'network': self.NETWORK}
-        response = self._api_call('address', params, method='post', api_url=self.API_URL2)
-
-        if not response['error']:
-            msg = f"👤  *Your ID & Username:*\n" \
-                  f"`{self.owner.id}`  &  `{self.owner.mention}`\n\n" \
-                  f"🏷  *VITE Network Deposit Address:*\n" \
-                  f"`{response['data']}`\n"
-
-        else:
-            msg = f"🟡 Wallet error (deposit address)"
-            logger.error(f"Wallet::show_deposit() - {self.owner.mention}: {response['msg']}")
-
-        await self.owner.ui.send_message(text=msg, parse_mode=MD)
-
-        # Handle proper Telegram Query closing
-        if query:
-            await query.answer()
-
     @property
     def short_address(self) -> str:
         if self.address:
@@ -416,7 +399,7 @@ class AliasWallet:
     """Helper class to represent AccountAlias objects as TipBotUser like object"""
     def __init__(self, title: str = None, address: str = None, **kwargs):
         self.owner: object = None
-        self.title = title.replace('#', '')
+        self.title = title.replace('#', '') if title else ''
         self.is_bot = True
         self.address = address
 
@@ -484,24 +467,3 @@ class AliasWallet:
     def __repr__(self):
         return f"AliasReceiver(#{self.title}, {self.short_address()})"
 
-
-async def welcome_screen(user, message):
-    active_chat = message.chat.id
-    media = types.MediaGroup()
-    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'), caption=Tipbot.HELP_STRING, parse_mode=MD)
-
-    if Tipbot.ADMIN_ID in str(user.id):
-        await bot.send_media_group(chat_id=active_chat, media=media)
-    else:
-        await bot.send_media_group(chat_id=user.id, media=media)
-
-
-async def faq_screen(user, message):
-    active_chat = message.chat.id
-    media = types.MediaGroup()
-    media.attach_photo(types.InputFile('static/tipbot-wallet-gui.png'), caption=Tipbot.FAQ_STRING, parse_mode=MD)
-
-    if Tipbot.ADMIN_ID in str(user.id):
-        await bot.send_media_group(chat_id=active_chat, media=media)
-    else:
-        await bot.send_media_group(chat_id=user.id, media=media)

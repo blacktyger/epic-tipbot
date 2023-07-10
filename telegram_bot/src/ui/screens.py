@@ -1,4 +1,6 @@
 """Long Telegram strings"""
+from ..fees import ViteFee
+
 
 TITLE = "  🤖 *TIP-BOT WALLET*"
 LINE = "➖➖➖➖➖➖➖➖"
@@ -38,6 +40,7 @@ def vite_loading_wallet_2():
 {LINE}
 """
 
+
 def epic_loading_wallet_1(*args):
     return \
         f"""
@@ -68,6 +71,7 @@ def epic_loading_wallet_2(*args):
 
 {LINE}
 """
+
 
 def vite_pending_1(*args):
     plural = 's' if int(args[0]) > 1 else ''
@@ -146,10 +150,15 @@ def invalid_wallet():
 
 
 def ready_wallet(*args):
-    if isinstance(args[2], str) and 'Error' in args[2]:
-        epic_balance = f"🟡 `{args[2]}`"
+    if isinstance(args[2], str) and ('wrong' in args[2] or 'Create' in args[2]):
+        epic_balance_1 = f"🟡 `{args[2]}`"
+        epic_balance_2 = args[3]
+    elif args[4]:
+        epic_balance_1 = f"🪙  `{args[2]}`  *EPIC*"
+        epic_balance_2 = f"💲  `{args[3]}`"
     else:
-        epic_balance = f"🪙  `{args[2]}`  *EPIC*"
+        epic_balance_1 = f"🪙  `{args[2]}`  *EPIC*"
+        epic_balance_2 = f"💲  `{args[3]}`"
 
     return \
         f"""
@@ -160,8 +169,21 @@ def ready_wallet(*args):
 💲  `{args[1]}`                 
 {LINE}
 {EPIC_T}
-{epic_balance}
-💲  `{args[3]}`
+{epic_balance_1}
+{epic_balance_2}{args[4]}
+{LINE}
+"""
+
+
+def epic_balance_details(balance):
+    return \
+f"""🔍 *EPIC Balance Details*
+{LINE}
+Available: `{balance.spendable}`
+Pending: `{balance.pending}`
+Locked: `{balance.locked}`
+
+Outputs: `{balance.outputs}`
 {LINE}
 """
 
@@ -200,6 +222,7 @@ def new_vite_wallet_string(payload):
 
 '''
 
+
 def update_v_2_5():
     return \
         f"""
@@ -222,3 +245,45 @@ From now users can also request mnemonic seed phrase of the @TipBotWallet, in or
 
 Have questions? Join @EpicTipBotSupport group!
     """
+
+
+HELP_STRING = \
+    """
+🤖 *Hey, I'm Epic-Cash Tip-Bot* 👋
+
+To signup with new account:
+👉 /create
+
+▪️ You will receive one-time link with your wallet *seed phrase* and *Tip-Bot* account *password* - please save them somewhere safe! 
+
+▪️ Now you can deposit Epic-Cash to your wallet from *Vite Mobile/Desktop or Web app*, more details at vite.org.
+
+▪️ Anyone with Tip-Bot account can tip or be tipped by @username:
+
+👉 tip @blacktyg3r 0.1
+
+▪️ to manage your *Wallet*:
+👉 /wallet
+
+Need help? [@blacktyg3r](https://t.me/blacktyg3r)    
+"""
+
+FAQ_STRING = \
+    f"""
+ℹ️ *Epic Tip-Bot FAQ*
+
+👉 *What exactly is Tip-Bot Wallet?*
+▪️ It is fully functional wallet on the VITE blockchain connected to your Telegram account.
+
+👉 *Do I need Vite app to use Tip Bot?*
+▪️ You can start using Tip-Bot right away and receive tips, but to deposit or withdraw you will need [Vite wallet](https://app.vite.net/).
+
+👉 *How much does it cost?*
+▪️ Using Epic Tip-Bot is *free*, transactions have fees, withdraw to other Vite wallets: *{ViteFee().fee_values()['withdraw']} EPIC* and Tip/Send: *{ViteFee().fee_values()['tip']}%*.
+
+👉 *Is it safe?*
+▪️ This is custodial solution, means software have access to your private keys. Although all security measures are in place, there is always risk of losing funds - *use only for low value operations and withdraw regularly!*
+
+👉 *Can I send EPIC to someone without Tip-Bot account?*
+▪️ You can also send/withdraw from your wallet to any valid VITE address (starting with `vite_...`).
+"""

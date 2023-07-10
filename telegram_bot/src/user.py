@@ -1,10 +1,11 @@
+import asyncio
 import typing
 import random
 
 from aiogram.types import User
 
+from .wallets import ViteWallet, EpicWallet, AliasWallet
 from . import tools, logger, DJANGO_API_URL
-from .wallets import ViteWallet, EpicWallet
 from .settings import Tests
 from .ui import Interface
 
@@ -18,7 +19,7 @@ class TipBotUser(User):
     def __init__(self, is_registered: bool = False, **kwargs: typing.Any):
         super().__init__(**kwargs)
         self.is_registered = is_registered
-        self.ui = Interface(self)
+        self.ui = Interface(owner=self)
 
         # temp_user is used to access some instance methods,
         # in this case do not try to connect with database
@@ -26,6 +27,7 @@ class TipBotUser(User):
             self.update_from_db()
             self.vite_wallet = ViteWallet(owner=self)
             self.epic_wallet = EpicWallet(owner=self)
+            self.alias_wallet = AliasWallet(owner=self)
 
     @property
     def name(self):

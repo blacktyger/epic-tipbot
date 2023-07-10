@@ -11,7 +11,7 @@ from src import dp
 @dp.callback_query_handler(wallet_cb.filter(action='deposit'), state='*')
 async def gui_deposit(query: types.CallbackQuery, callback_data: dict):
     owner = TipBotUser(id=callback_data['user'])
-    await owner.vite_wallet.show_deposit(query=query)
+    await owner.ui.show_deposit(query=query)
 
 
 # /------ WALLET GUI WITHDRAW STEP 1/3 ------\ #
@@ -138,6 +138,14 @@ async def get_alias_details(message: types.Message):
 
         if owner.vite_wallet:
             await owner.ui.alias_details(message=message)
+
+
+# /------ WALLET GUI SUPPORT ------\ #
+@dp.callback_query_handler(wallet_cb.filter(action='support'), state='*')
+async def gui_support(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    owner = TipBotUser(id=callback_data['user'])
+    print(owner)
+    await owner.ui.show_support(query=query)
 
 
 # # TODO: TEST  /------ WALLET GUI UPDATE ------\ #

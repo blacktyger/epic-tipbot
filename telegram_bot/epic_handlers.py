@@ -1,22 +1,13 @@
-import asyncio
-import json
-from _decimal import Decimal
 from pprint import pprint
-import threading
-import queue
 import os
 
 from aiogram.dispatcher import FSMContext
-from aiogram import *
 from aiogram.types import ParseMode
+from aiogram import *
 
 from src.commands import COMMANDS
+from src import dp, tools, Database, storage
 from src.user import TipBotUser
-from src import logger
-from src.ui import *
-from src import dp, tools, Database
-from src.wallets.epic.epic_py.wallet.models import Transaction
-from src.wallets.epic.epic_py.utils import benchmark
 
 """
 User actions:
@@ -29,9 +20,6 @@ TRANSACTIONS:
     tip tx -> db save tip transaction (owner, asset, amount, type_of, status, extra data(tx_id), message)
     withdraw tx -> db save withdraw transaction (owner, asset, amount, type_of, status, extra data(tx_id), message)
 """
-
-
-# response = self._api_call('send_transaction', transaction, method='post', api_url=self.API_URL2)
 
 
 # /------ CREATE EPIC WALLET ------\ #
@@ -50,7 +38,8 @@ async def create_wallet(message: types.Message):
             'mnemonics': wallet.mnemonics
             }
 
-        response = tools.api_call(query='save_wallet', url=Database.TIPBOT_URL, params=params, method='post')
+        await owner.epic_wallet.db.wallets.post(params)
+        # response = tools.api_call(query='save_wallet', url=Database.TIPBOT_URL, params=params, method='post')
 
 
 @dp.message_handler(commands=['send_epic'], state='*')
@@ -66,7 +55,8 @@ async def send_tip(message: types.Message):
         print(tx)
         text = f"✅ Sent {tx['amount']} EPIC to {tx['receiver']['mention']}"
         await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-        response = tools.api_call(query='save_transaction', url=Database.TIPBOT_URL, params=tx, method='post')
+        await owner.epic_wallet.db.transactions.post(tx)
+        # response = tools.api_call(query='save_transaction', url=Database.TIPBOT_URL, params=tx, method='post')
 
     for tx in transactions['failed']:
         print(tx)
@@ -86,14 +76,34 @@ async def send_tip(message: types.Message):
             await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
 
 
-@dp.message_handler(commands=['deposit'], state='*')
-async def deposit(message: types.Message):
-    owner = TipBotUser.from_obj(message.from_user)
-    address = owner.epic_wallet.config.epicbox_address
+# /------ RUN EPICBOX DEPOSIT HANDLE ------\ #
+@dp.callback_query_handler(text='epicbox_deposit', state='*')
+async def epicbox_deposit(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    message = await owner.ui.epicbox_updater()
+    storage.update(key=f"{owner.id}_updater", value=True)
+    storage.update(key=f"{owner.id}_updater_message", value=message)
 
-    message = await owner.ui.send_message(text=f"⏳ Waiting for deposit..\n\n{address}")
     await owner.epic_wallet.start_updater(message)
 
+
+# /------ CANCEL EPICBOX DEPOSIT HANDLE ------\ #
+@dp.callback_query_handler(text='cancel_epicbox_deposit', state='*')
+async def epicbox_deposit(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    storage.update(f"{owner.id}_updater", value=False)
+    message = storage.get(f"{owner.id}_updater_message")
+    await owner.ui.delete_message(message)
+
+
+@dp.message_handler(commands=['balance_details'], state='*')
+async def balance_details(message: types.Message):
+    owner = TipBotUser.from_obj(message.from_user)
+    message = await owner.ui.send_message(text=f"⏳ Getting EPIC Balance Details..")
+
+    balance = await owner.epic_wallet.get_balance(get_outputs=True)
+    text = owner.ui.screen.epic_balance_details(balance)
+    await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
 
 @dp.message_handler(commands=['withdraw'], state='*')
 async def withdraw(message: types.Message):
@@ -109,7 +119,7 @@ async def withdraw(message: types.Message):
             amount += tx['data']['fee']
             text = f"✅ Sent  `{amount} EPIC`  (including fees) to `{tx['address']}`"
             await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-            tools.api_call(query='save_transaction', url=Database.TIPBOT_URL, params=tx, method='post')
+            await owner.epic_wallet.db.transactions.post(tx)
 
         for tx in transactions['failed']:
             print(tx)

@@ -1,4 +1,5 @@
 from json import JSONDecodeError
+from dill import Pickler, Unpickler
 import asyncio
 import decimal
 import random
@@ -11,6 +12,7 @@ from aiogram.contrib.fsm_storage.files import PickleStorage
 import requests
 import aiohttp
 
+from .database import DatabaseManager
 from .settings import Database, EPIC
 from .logger_ import logger
 
@@ -21,7 +23,8 @@ API_PORT = Database.API_PORT
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
 owner_ports_file = os.path.join(EPIC.wallets_dir, '.owner_ports')
-
+shelve.Pickler = Pickler
+shelve.Unpickler = Unpickler
 
 class SimpleDatabase:
     def __init__(self):
@@ -40,6 +43,7 @@ storage = SimpleDatabase()
 
 
 class PortManager:
+    db = DatabaseManager()
     api_url = f"{TIPBOT_API_URL}/ports/"
     ports_range = (5000, 60000)
 
@@ -59,11 +63,11 @@ class PortManager:
 
     def set_port(self):
         port = self._get_random_port()
-        response = requests.post(url=self.api_url, json={'port': port}).json()
+        response = self.db.ports.post({'port': port})
 
         while response['error']:
-            print(response)
-            response = requests.post(url=self.api_url, json={'port': port}).json()
+            logger.warning(response)
+            response = self.db.ports.post({'port': port})
 
         return response['data']
 
@@ -106,17 +110,18 @@ class MarketData:
 
         if len(symbol) == 3:
             url = f"{cls.epic_feed_url}/simple/price?ids=epic-cash&vs_currencies={symbol}"
-            while True:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with await session.get(url) as response:
+
+            async with aiohttp.ClientSession() as session:
+                while True:
+                    try:
+                        async with await session.request('GET', url) as response:
                             json_response = await response.json(content_type=None)
                             price = decimal.Decimal(json_response['epic-cash'][symbol.lower()])
                             storage.update(key='epic_vs_usd', value=price)
-                except (KeyError, JSONDecodeError) as er:
-                    logger.error(f"price_epic_vs: {er}")
+                    except (KeyError, JSONDecodeError) as er:
+                        logger.error(f"price_epic_vs: {er}")
 
-                await asyncio.sleep(interval)
+                    await asyncio.sleep(interval)
 
     @classmethod
     def price_btc_vs(cls, currency: str):
