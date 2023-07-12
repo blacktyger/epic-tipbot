@@ -3,10 +3,11 @@ import asyncio
 
 from aiogram.dispatcher import FSMContext
 from aiogram import *
+from aiogram.types import ParseMode
 
 from src.keys import FEE_SEED, ADDRESS_ID, TOKEN
 from dev_tools import WithdrawWallet
-from src import logger, tools, dp, database
+from src import logger, tools, dp, database, ui
 from src.commands import COMMANDS
 from src.settings import Tipbot
 from src.user import TipBotUser
@@ -46,6 +47,51 @@ async def wallet(message: types.Message, state: FSMContext):
     await owner.ui.show_wallet(state=state, message=message)
 
 
+# /------ WALLET REFRESH HANDLE ------\ #
+@dp.callback_query_handler(ui.wallet_cb.filter(action='refresh'), state='*')
+async def refresh(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    owner = TipBotUser(id=callback_data['user'])
+    await owner.ui.delete_message(query.message)
+    await owner.ui.show_wallet(state)
+
+
+# /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
+@dp.callback_query_handler(ui.wallet_cb.filter(action='deposit'), state='*')
+async def gui_deposit(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    owner = TipBotUser(id=callback_data['user'])
+    await owner.ui.show_deposit(query=query)
+
+
+# /------ WALLET GUI WITHDRAW STEP 0/3 ------\ #
+@dp.callback_query_handler(ui.wallet_cb.filter(action='withdraw'), state='*')
+async def gui_withdraw(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    owner = TipBotUser(id=callback_data['user'])
+    await owner.ui.withdraw_0_of_3(state=state, query=query)
+
+
+# /------ WALLET GUI WITHDRAW STEP 1/3 ------\ #
+@dp.callback_query_handler(text=['withdraw_epic', 'withdraw_vite'], state=ui.SharedStates.withdraw)
+async def gui_withdraw_network(query: types.CallbackQuery, state: FSMContext):
+    network = query.data.split('_')[-1]
+    await state.update_data({'network': network})
+    owner = TipBotUser(id=query.message.chat.id)
+    await owner.ui.withdraw_1_of_3(state=state, query=query)
+
+
+# /------ WALLET GUI WITHDRAW STEP 2/3 ------\ #
+@dp.message_handler(state=ui.SharedStates.ask_for_address)
+async def handle_withdraw_address(message: types.Message, state: FSMContext):
+    owner = TipBotUser.from_obj(message.from_user)
+    await owner.ui.withdraw_2_of_3(state=state, message=message)
+
+
+# /------ WALLET GUI WITHDRAW STEP 3/3 ------\ #
+@dp.message_handler(state=ui.SharedStates.ask_for_amount)
+async def handle_withdraw_amount(message: types.Message, state: FSMContext):
+    owner = TipBotUser.from_obj(message.from_user)
+    await owner.ui.withdraw_3_of_3(state=state, message=message)
+
+
 # /------ START/HELP HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['start'])
 async def start(message: types.Message):
@@ -64,6 +110,14 @@ async def faq(message: types.Message):
 @dp.callback_query_handler(text='cancel_any', state='*')
 async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.from_user.id)
+    await owner.ui.cancel_state(state=state, query=query)
+
+
+# /------ CLOSE ANY MESSAGE HANDLE ------\ #
+@dp.callback_query_handler(text='close_any', state='*')
+async def close_any_message(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    await owner.ui.delete_message(query.message)
     await owner.ui.cancel_state(state=state, query=query)
 
 

@@ -15,13 +15,7 @@ ctx = getcontext()
 ctx.prec = 8
 
 
-class Fee:
-    """
-    Base Fee class for EpicTipBot transactions fees.
-    """
-    pass
-
-class ViteFee(Fee):
+class Fees:
     """
     Fee class for the EpicTipBot Vite blockchain transactions
     """

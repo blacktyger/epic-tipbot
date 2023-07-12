@@ -1,5 +1,8 @@
-from json import JSONDecodeError
+from _decimal import Decimal
+from typing import Any
+
 from dill import Pickler, Unpickler
+from json import JSONDecodeError
 import asyncio
 import decimal
 import random
@@ -19,6 +22,7 @@ from .logger_ import logger
 
 ctx = decimal.Context()
 ctx.prec = 20
+
 API_PORT = Database.API_PORT
 DJANGO_API_URL = Database.API_URL
 TIPBOT_API_URL = Database.TIPBOT_URL
@@ -30,12 +34,14 @@ class SimpleDatabase:
     def __init__(self):
         self.db_file = 'simple.db'
 
-    def update(self, key, value):
+    def update(self, key: str, value: Any):
         with shelve.open(self.db_file) as db:
             db[key] = value
 
-    def get(self, key):
+    def get(self, key: str, delete: bool = False):
         with shelve.open(self.db_file) as db:
+            if delete:
+                return db.pop(key)
             return db.get(key)
 
 
@@ -164,12 +170,16 @@ async def fee_wallet_update(mnemonics: str, address_id: str | int):
         await asyncio.sleep(60)
 
 
-def float_to_str(f):
+def num_as_str(f: float | int | str | Decimal) -> str:
     """
     Convert the given float to a string,
     without resorting to scientific notation
     """
-    d1 = ctx.create_decimal(repr(f))
+    f = str(f)
+    try:
+        d1 = ctx.create_decimal(f).quantize(Decimal(1) / (10 ** Decimal(8))).normalize(ctx)
+    except Exception:
+        d1 = ctx.create_decimal(f).normalize(ctx)
     return format(d1, 'f')
 
 

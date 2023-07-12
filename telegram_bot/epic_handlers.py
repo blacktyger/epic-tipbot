@@ -1,3 +1,5 @@
+import asyncio
+from _decimal import Decimal
 from pprint import pprint
 import os
 
@@ -6,8 +8,9 @@ from aiogram.types import ParseMode
 from aiogram import *
 
 from src.commands import COMMANDS
-from src import dp, tools, Database, storage
+from src import dp, tools, Database, storage, fees
 from src.user import TipBotUser
+from src.ui.interface import EpicWalletStates
 
 """
 User actions:
@@ -68,7 +71,7 @@ async def send_tip(message: types.Message):
             data = eval(data.replace('NotEnoughFunds: ', ''))
             available = float(data['available_disp'])
             needed = float(data['needed_disp'])
-            text = f"⚠️ Failed to send EPIC to {receiver}:\nNot enough balance: `{available}`, needed `{needed}`."
+            text = f"⚠️ Failed to send EPIC:\nNot enough balance: `{available}`, needed `{needed}`."
             await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
 
         elif "is wallet api running under" in tx['msg']:
@@ -80,65 +83,78 @@ async def send_tip(message: types.Message):
 @dp.callback_query_handler(text='epicbox_deposit', state='*')
 async def epicbox_deposit(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.from_user.id)
-    message = await owner.ui.epicbox_updater()
+    message = await owner.ui.epicbox_deposit()
     storage.update(key=f"{owner.id}_updater", value=True)
     storage.update(key=f"{owner.id}_updater_message", value=message)
-
+    await EpicWalletStates.deposit.set()
     await owner.epic_wallet.start_updater(message)
 
 
 # /------ CANCEL EPICBOX DEPOSIT HANDLE ------\ #
-@dp.callback_query_handler(text='cancel_epicbox_deposit', state='*')
-async def epicbox_deposit(query: types.CallbackQuery, state: FSMContext):
+@dp.callback_query_handler(text='cancel_epicbox_deposit', state=EpicWalletStates.deposit)
+async def cancel_epicbox_deposit(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.from_user.id)
     storage.update(f"{owner.id}_updater", value=False)
     message = storage.get(f"{owner.id}_updater_message")
+    await owner.ui.cancel_state(state)
     await owner.ui.delete_message(message)
+    storage.get(f"{owner.id}_updater_message", delete=True)
+
+
+# /------ EPIC WALLET WITHDRAW FINALIZE CALLBACK ------\ #
+@dp.callback_query_handler(text=['confirm_epic_withdraw'], state=EpicWalletStates.withdraw)
+async def withdraw(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.message.chat.id)
+
+    text = f"⏳ Processing the transaction.."
+    data = await state.get_data()
+    amount = data['amount']
+    address = data['address']
+    message = data['msg_withdraw']
+    await message.edit_text(text=text, reply_markup=None)
+
+    transactions = await owner.epic_wallet.send_epicbox(amount, address=address, tx_type='withdraw', message=f"Withdraw from @EpicTipBot")
+
+    for tx in transactions['success']:
+        await query.answer(text='Transaction Confirmed!')
+        text = f"✅ *Withdraw success*\n\n▪️ Open your EPIC Wallet to receive the transaction"
+        await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
+        await owner.epic_wallet.db.transactions.post(tx)
+        await asyncio.sleep(1)
+
+    for tx in transactions['failed']:
+        print(tx)
+        receiver = tx['data']['address']
+
+        if "NotEnoughFunds" in tx['msg']:
+            print(tx['msg'])
+            data = eval(tx['msg'])['message']
+            data = eval(data.replace('NotEnoughFunds: ', ''))
+            available = float(data['available_disp'])
+            needed = float(data['needed_disp'])
+            text = f"⚠️ Failed to send EPIC to {receiver}:\nNot enough balance: `{available}`, needed `{needed}`."
+            await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
+
+        elif "is wallet api running under" in tx['msg']:
+            text = f"⚠️ Failed to send EPIC to {receiver}."
+            await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
+
+    # Finish withdraw state
+    await state.finish()
+    await query.answer()
 
 
 @dp.message_handler(commands=['balance_details'], state='*')
-async def balance_details(message: types.Message):
+async def balance_details(message: types.Message, state: FSMContext):
     owner = TipBotUser.from_obj(message.from_user)
     message = await owner.ui.send_message(text=f"⏳ Getting EPIC Balance Details..")
+    await EpicWalletStates.balance.set()
 
     balance = await owner.epic_wallet.get_balance(get_outputs=True)
     text = owner.ui.screen.epic_balance_details(balance)
+
+    await owner.ui.cancel_state(state)
     await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-
-@dp.message_handler(commands=['withdraw'], state='*')
-async def withdraw(message: types.Message):
-    owner = TipBotUser.from_obj(message.from_user)
-    amount = round(owner.ui.get_amount(message) + 0.01, 8)
-    address = owner.ui.get_address(message)
-
-    if amount and address:
-        message = await owner.ui.send_message(text=f"⏳ Withdrawing `{float(amount)} EPIC`..")
-        transactions = await owner.epic_wallet.send_epicbox(amount, address=address, tx_type='withdraw', message=f"Withdraw from @EpicTipBot")
-
-        for tx in transactions['success']:
-            amount += tx['data']['fee']
-            text = f"✅ Sent  `{amount} EPIC`  (including fees) to `{tx['address']}`"
-            await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-            await owner.epic_wallet.db.transactions.post(tx)
-
-        for tx in transactions['failed']:
-            print(tx)
-            receiver = tx['data']['address']
-
-            if "NotEnoughFunds" in tx['msg']:
-                print(tx['msg'])
-                data = eval(tx['msg'])['message']
-                data = eval(data.replace('NotEnoughFunds: ', ''))
-                available = float(data['available_disp'])
-                needed = float(data['needed_disp'])
-                text = f"⚠️ Failed to send EPIC to {receiver}:\nNot enough balance: `{available}`, needed `{needed}`."
-                await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-
-            elif "is wallet api running under" in tx['msg']:
-                text = f"⚠️ Failed to send EPIC to {receiver}."
-                await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-    else:
-        await owner.ui.send_message(text=f"🟡 Invalid amount ot address")
 
 
 @dp.message_handler(commands=['send_epic2'], state='*')

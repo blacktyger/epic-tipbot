@@ -22,7 +22,7 @@ class ViteWallet:
     API_URL1 = DJANGO_API_URL
     API_URL2 = TIPBOT_API_URL
     NETWORK = settings.VITE.name
-    Fee = fees.ViteFee
+    Fee = fees.Fees
 
     def __init__(self, owner: Any, address: str = None):
         self.owner = owner
@@ -166,7 +166,7 @@ class ViteWallet:
             balances, pending = self.parse_vite_balance(balance['data'])
 
             if isinstance(balances, dict) and 'EPIC' in balances.keys():
-                epic_balance = tools.float_to_str(balances['EPIC'])
+                epic_balance = tools.num_as_str(balances['EPIC'])
             else:
                 epic_balance = 0.0
 
@@ -224,7 +224,7 @@ class ViteWallet:
         # Remove keyboard and display processing msg
         data = await state.get_data()
         text = f"⏳ Processing the transaction.."
-        await data['msg_confirmation'].edit_text(text=text, reply_markup=None, parse_mode=MD)
+        await data['msg_withdraw'].edit_text(text=text, reply_markup=None, parse_mode=MD)
 
         # Check wallet balance against full amount (with fees)
         if not await self._get_fees(data['amount'], query, state):
@@ -261,7 +261,7 @@ class ViteWallet:
         explorer_url = self.get_explorer_tx_url(transaction_hash)
 
         # Prepare user confirmation message
-        amount = tools.float_to_str(data['amount'])
+        amount = tools.num_as_str(data['amount'])
         private_msg = f"✅ *Withdraw success*\n▪️[Transaction details (vitescan.io)]({explorer_url})"
 
         # Send tx confirmation to sender's private chat
@@ -316,7 +316,7 @@ class ViteWallet:
         explorer_url = self.get_explorer_tx_url(transaction_hash)
 
         # Prepare user confirmation message
-        amount = tools.float_to_str(data['amount'])
+        amount = tools.num_as_str(data['amount'])
         private_msg = f"✅ Transaction sent successfully\n️️ [Transaction details (vitescan.io)]({explorer_url})"
         receiver_msg = f"💸 `{amount} EPIC` from {self.owner.get_url()}"
 

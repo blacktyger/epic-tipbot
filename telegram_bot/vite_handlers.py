@@ -7,37 +7,8 @@ from src.ui import *
 from src import dp
 
 
-# /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
-@dp.callback_query_handler(wallet_cb.filter(action='deposit'), state='*')
-async def gui_deposit(query: types.CallbackQuery, callback_data: dict):
-    owner = TipBotUser(id=callback_data['user'])
-    await owner.ui.show_deposit(query=query)
-
-
-# /------ WALLET GUI WITHDRAW STEP 1/3 ------\ #
-@dp.callback_query_handler(wallet_cb.filter(action='withdraw'), state='*')
-async def gui_withdraw(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
-    owner = TipBotUser(id=callback_data['user'])
-    await owner.ui.withdraw_1_of_3(state=state, query=query)
-
-
-# /------ WALLET GUI WITHDRAW STEP 2/3 ------\ #
-@dp.message_handler(state=WithdrawStates.ask_for_address)
-async def handle_withdraw_address(message: types.Message, state: FSMContext):
-    owner = TipBotUser.from_obj(message.from_user)
-    await owner.ui.withdraw_2_of_3(state=state, message=message)
-
-
-# /------ WALLET GUI WITHDRAW STEP 3/3 ------\ #
-@dp.message_handler(state=WithdrawStates.ask_for_amount)
-async def handle_withdraw_amount(message: types.Message, state: FSMContext):
-    owner = TipBotUser.from_obj(message.from_user)
-    await owner.ui.withdraw_3_of_3(state=state, message=message)
-
-
 # /------ WALLET GUI WITHDRAW EPIC FINALIZE CALLBACK ------\ #
-@dp.callback_query_handler(text=['confirm_withdraw'], state=[DonateStates.confirmation,
-                                                             WithdrawStates.confirmation])
+@dp.callback_query_handler(text=['confirm_vite_withdraw'], state=[DonateStates.confirmation, WithdrawStates.withdraw])
 async def handle_withdraw_final(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.message.chat.id)
     await owner.vite_wallet.withdraw(state=state, query=query)
@@ -79,8 +50,7 @@ async def gui_donate(query: types.CallbackQuery, callback_data: dict, state: FSM
 
 
 # /------ WALLET GUI DONATE STEP 2/2 ------\ #
-@dp.callback_query_handler(text=['donate_1', 'donate_5', 'donate_10'],
-                           state=DonateStates.ask_for_amount)
+@dp.callback_query_handler(text=['donate_1', 'donate_5', 'donate_10'], state=DonateStates.ask_for_amount)
 async def handle_donate_amount(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.message.chat.id)
     await owner.ui.donate_2_of_2(state=state, query=query)

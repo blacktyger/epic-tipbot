@@ -18,8 +18,6 @@ async def get_client_session():
         if not DATABASE_SESSION:
             DATABASE_SESSION = aiohttp.ClientSession()
 
-    print(DATABASE_SESSION)
-
     return DATABASE_SESSION
 
 

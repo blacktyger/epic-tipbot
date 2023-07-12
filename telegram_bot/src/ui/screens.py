@@ -1,5 +1,5 @@
 """Long Telegram strings"""
-from ..fees import ViteFee
+from ..fees import Fees
 
 
 TITLE = "  🤖 *TIP-BOT WALLET*"
@@ -180,7 +180,7 @@ def epic_balance_details(balance):
 f"""🔍 *EPIC Balance Details*
 {LINE}
 Available: `{balance.spendable}`
-Pending: `{balance.pending}`
+Pending: `{balance.pending + balance.to_finalize}`
 Locked: `{balance.locked}`
 
 Outputs: `{balance.outputs}`
@@ -279,7 +279,7 @@ FAQ_STRING = \
 ▪️ You can start using Tip-Bot right away and receive tips, but to deposit or withdraw you will need [Vite wallet](https://app.vite.net/).
 
 👉 *How much does it cost?*
-▪️ Using Epic Tip-Bot is *free*, transactions have fees, withdraw to other Vite wallets: *{ViteFee().fee_values()['withdraw']} EPIC* and Tip/Send: *{ViteFee().fee_values()['tip']}%*.
+▪️ Using Epic Tip-Bot is *free*, transactions have fees, withdraw to other Vite wallets: *{Fees().fee_values()['withdraw']} EPIC* and Tip/Send: *{Fees().fee_values()['tip']}%*.
 
 👉 *Is it safe?*
 ▪️ This is custodial solution, means software have access to your private keys. Although all security measures are in place, there is always risk of losing funds - *use only for low value operations and withdraw regularly!*

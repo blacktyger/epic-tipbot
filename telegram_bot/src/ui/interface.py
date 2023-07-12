@@ -14,25 +14,30 @@ from aiogram import types
 
 from .. import logger, bot, tools, Tipbot, scheduler
 from ..tools import storage
-from ..fees import ViteFee
+from ..fees import Fees
 from . import screens
 
 
 # Wallet GUI buttons callback
 wallet_cb = CallbackData('wallet', 'action', 'user', 'username')
 donate_cb = CallbackData('donate', 'action', 'amount')
-confirm_failed_tip_cb = CallbackData('failed_tip', 'action', 'user', 'message')
-
+confirm_failed_tip_cb = CallbackData('failed_tip', 'action', 'user')
 
 MD = ParseMode.MARKDOWN
 HTML = ParseMode.HTML
 
 
 # Manage Wallet GUI states
+class SharedStates(StatesGroup):
+    withdraw = State()
+    ask_for_address = State()
+    ask_for_amount = State()
+
+
 class WithdrawStates(StatesGroup):
     ask_for_address = State()
     ask_for_amount = State()
-    confirmation = State()
+    withdraw = State()
 
 
 class SendStates(StatesGroup):
@@ -46,10 +51,18 @@ class DonateStates(StatesGroup):
     confirmation = State()
 
 
+class EpicWalletStates(StatesGroup):
+    deposit = State()
+    sending = State()
+    balance = State()
+    withdraw = State()
+
+
 class Interface:
     """
     Interface inside telegram chat to manage TipBot account.
     """
+    state = storage
 
     def __init__(self, owner):
         self.owner = owner
@@ -99,7 +112,8 @@ class Interface:
     async def show_wallet(self, state=None, message=None):
         """Spawn wallet interface inside Telegram chat window"""
         # Reset old state and data
-        if state: await state.reset_state(with_data=True)
+        if state:
+            await state.reset_state(with_data=True)
 
         # Prepare main wallet GUI (message and inline keyboard)
         keyboard = self.home_keyboard()
@@ -127,7 +141,7 @@ class Interface:
 
         # Get VITE and EPIC blockchain balances via threading
         threading.Thread(target=self.owner.vite_wallet.epic_balance).start()
-        threading.Thread(target=asyncio.run, args=(self.owner.epic_wallet.get_balance(), )).start()
+        threading.Thread(target=asyncio.run, args=(self.owner.epic_wallet.get_balance(),)).start()
 
         # VITE and EPIC balances loading
         while self.owner.vite_wallet.is_updating:
@@ -181,6 +195,7 @@ class Interface:
 
         # EPIC Blockchain strings for GUI
         e_balance = self.owner.epic_wallet._cached_balance
+        print(e_balance.json())
         epic_vs_usd = storage.get(key='epic_vs_usd')
 
         if not e_balance.error:
@@ -189,7 +204,7 @@ class Interface:
             else:
                 details = ''
 
-            e_in_usd = f"{round(Decimal(e_balance.spendable) * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
+            e_in_usd = f"{round(e_balance.spendable * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
             e_balance = e_balance.spendable
         else:
             if e_balance.error and 'object has no' in e_balance.error:
@@ -218,6 +233,481 @@ class Interface:
 
         # Send link with the mnemonics to sender's private chat
         await self.send_message(text=self.screen.vite_mnemonics(response['data']), parse_mode=HTML)
+
+    async def withdraw_0_of_3(self, state, query):
+        # Set new state
+        await SharedStates.withdraw.set()
+        text = f"🌐 Choose network (wallet) to withdraw from:"
+
+        keyboard = InlineKeyboardMarkup()
+        epic = InlineKeyboardButton(text='EPIC Network', callback_data='withdraw_epic')
+        vite = InlineKeyboardButton(text='Vite Network', callback_data='withdraw_vite')
+        cancel = InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+        keyboard.row(epic, vite).row(cancel)
+
+        ask_for_network = await self.send_message(text=text, reply_markup=keyboard)
+        await state.update_data(msg_withdraw=ask_for_network)
+        await query.answer()
+
+    async def withdraw_1_of_3(self, state, query):
+        # Remove messages from previous state
+        await self.remove_state_messages(state)
+
+        # Set new state
+        await SharedStates.ask_for_address.set()
+
+        # Get state data (withdraw network)
+        data = await state.get_data()
+
+        # Ask user for address
+        text = f"📨 Provide {data['network'].upper()} address to withdraw:"
+        ask_for_address = await query.message.reply(text=text, reply=False, reply_markup=self.cancel_keyboard())
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_ask_for_address=ask_for_address)
+        await query.answer()
+
+    async def withdraw_2_of_3(self, state, message):
+        valid_address = False
+
+        # Extract address from user message
+        address = message.text.strip()
+
+        # Get state data (withdraw network)
+        data = await state.get_data()
+        network = data['network'].upper()
+
+        # Validate withdraw address and save to storage
+        if network == self.owner.vite_wallet.NETWORK:
+            valid_address = self.owner.vite_wallet.is_valid_address(address)
+        elif network == self.owner.epic_wallet.NETWORK:
+            valid_address = self.owner.epic_wallet.is_valid_address(address)
+
+        if valid_address:
+            await state.update_data(address=address)
+
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+
+            # Set new state
+            await SharedStates.ask_for_amount.set()
+
+            # Send message about amount
+            text = '💵 How much to withdraw?'
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
+        else:
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+
+            # Send invalid amount message
+            text = '🔸 Invalid withdraw address, try again:'
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_ask_for_amount=ask_for_amount)
+
+    async def withdraw_3_of_3(self, state, message):
+        # Extract amount from user message
+        user_amount = Decimal(message.text.strip())
+        withdraw_fee = Fees.WITHDRAW
+
+        # Get state data (withdraw network)
+        data = await state.get_data()
+
+        # try:
+        # Remove messages from previous state
+        await self.remove_state_messages(state)
+
+        # Set new state depending on withdrawal network
+        if data['network'] == 'vite':
+            await WithdrawStates.withdraw.set()
+            callback_data = 'confirm_vite_withdraw'
+            tx_amount = user_amount + withdraw_fee
+            display_send = tools.num_as_str(user_amount + withdraw_fee)
+            display_rece = tools.num_as_str(user_amount)
+            confirmation_string = f" ☑️ Confirm your withdraw request:\n\n" \
+                                  f"▪️ Network: `VITE (EPIC-002 Token)`\n" \
+                                  f"▪️ Sending: `{display_send} EPIC`\n" \
+                                  f"▪️ Receive: `{display_rece} EPIC`\n" \
+                                  f"▪️ Address: `{data['address']}`\n"
+            await state.update_data(amount=tools.num_as_str(tx_amount))
+
+        elif data['network'] == 'epic':
+            await EpicWalletStates.withdraw.set()
+            callback_data = 'confirm_epic_withdraw'
+            message = await self.send_message(text=f"⏳ Generating transaction..")
+            tx_fee = await self.owner.epic_wallet.calculate_fees(tools.num_as_str(user_amount))
+            tx_amount = user_amount - tx_fee + withdraw_fee
+            display_send = tools.num_as_str(user_amount + withdraw_fee)
+            display_rece = tools.num_as_str(user_amount)
+            confirmation_string = f" ☑️ Confirm your withdraw request:\n\n" \
+                                  f"▪️ Network: `Native EPIC (via Epicbox)`\n" \
+                                  f"▪️ Sending: `{display_send} EPIC`\n" \
+                                  f"▪️ Receive: `{display_rece} EPIC`\n" \
+                                  f"▪️ Address: `{data['address']}`\n"
+            await state.update_data(amount=tools.num_as_str(tx_amount))
+            await self.delete_message(message)
+        else:
+            return
+
+        # Prepare and save amount
+
+        confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+        confirmation_keyboard.row(
+            InlineKeyboardButton(text=f'✅ Confirm', callback_data=callback_data),
+            InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+            )
+
+        # Send confirmation keyboard
+        withdraw = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_withdraw=withdraw)
+
+        # except Exception as e:
+        #     # Remove messages from previous state
+        #     await self.remove_state_messages(state)
+        #     logger.error(f"GUI::withdraw_3_of_3() - amount {e}")
+        #
+        #     # Send wrong amount message
+        #     text = '🔸 Wrong amount, try again'
+        #     confirmation = await self.send_message(text=text)
+        #
+        #     # Save message to remove to temp storage
+        #     await state.update_data(msg_confirmation=confirmation)
+
+    async def send_to_user_1_of_3(self, state, query):
+        # Set new state
+        await SendStates.ask_for_recipient.set()
+
+        # Ask user for recipient
+        text = '📩 Provide receiver @username'
+        ask_for_recipient = await query.message.reply(text=text, reply=False, reply_markup=self.cancel_keyboard())
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_ask_for_recipient=ask_for_recipient)
+        await query.answer()
+
+    async def send_to_user_2_of_3(self, state, message):
+        # Validate recipient and save to storage
+        recipients, unknown = self.get_receivers(message)
+
+        if recipients:
+            await state.update_data(recipients=recipients[0].params())
+
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+
+            # Set new state
+            await SendStates.ask_for_amount.set()
+
+            # Send message about amount
+            text = '💵 How much to send?'
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
+        else:
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+
+            # Send invalid amount message
+            text = '🔸 Invalid recipient, try again:'
+            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_ask_for_amount=ask_for_amount)
+
+    async def send_to_user_3_of_3(self, state, message):
+        # Extract amount from user message
+        amount = message.text.strip()
+
+        try:
+            # Validate and save amount
+            amount = float(amount)
+            await state.update_data(amount=amount)
+
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+
+            # Set new state
+            await SendStates.confirmation.set()
+
+            data = await state.get_data()
+            amount = tools.num_as_str(data['amount'])
+            confirmation_string = \
+                f"☑️ Confirm your send request:\n\n`▪️ Send {amount} EPIC (+{str(Fees.get_tip_fee(amount))} fee) to {data['recipients']['mention']}`"
+            confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+
+            confirmation_keyboard.row(
+                InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_send'),
+                InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+                )
+
+            # Send confirmation keyboard
+            confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
+
+            # Save message to remove to temp storage
+            await state.update_data(msg_confirmation=confirmation)
+
+        except Exception as e:
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+            logger.error(f"GUI::send_to_user_3_of_3() - amount {e}")
+
+            # Send wrong amount message
+            confirmation = await self.send_message(text='🔸 Wrong amount, try again')
+
+            # Save message to remove to temp storage
+            await state.update_data(msg_confirmation=confirmation)
+
+    async def show_deposit(self, query=None):
+        vite_deposit = self.owner.vite_wallet.deposit()
+        epic_deposit = self.owner.epic_wallet.config.epicbox_address
+
+        if not vite_deposit['error']:
+            # msg = f"👤  *Your ID & Username:*\n" \
+            #       f"`{self.owner.id}`  &  `{self.owner.mention}`\n\n" \
+            msg = f"🏷  *VITE Network Deposit Address:*\n" \
+                  f"`{vite_deposit['data']}`\n\n" \
+                  f"🏷  *EPIC Network Deposit Address:*\n" \
+                  f"`{epic_deposit}`\n\n" \
+                  f"ℹ️ Click the button bellow BEFORE sending Native EPIC deposit transaction."
+
+        else:
+            msg = f"🟡 Wallet error (deposit address)"
+            logger.error(f"interface::show_deposit() - {self.owner.mention}: {vite_deposit['msg']}")
+
+        keyboard = InlineKeyboardMarkup()
+        start = InlineKeyboardButton(text='📩 Start Epicbox Deposit', callback_data='epicbox_deposit')
+        close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
+        keyboard.row(start, close)
+
+        await self.send_message(text=msg, parse_mode=MD, reply_markup=keyboard)
+
+        # Handle proper Telegram Query closing
+        if query:
+            await query.answer()
+
+    async def epicbox_deposit(self):
+        keyboard = InlineKeyboardMarkup()
+        button = InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_epicbox_deposit')
+        keyboard.add(button)
+
+        message = await self.send_message(text=f"⏳ Waiting for deposit: 180 seconds left..", reply_markup=keyboard)
+        asyncio.create_task(self.deposit_message_updater(message, keyboard))
+        return message
+
+    async def donate_1_of_2(self, state, query):
+        # Set new state
+        await DonateStates.ask_for_amount.set()
+
+        # Send message about amount
+        text = '💵 How much you would like to donate?'
+        ask_for_amount = await self.send_message(text=text, reply_markup=self.donate_keyboard())
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_ask_for_amount=ask_for_amount)
+        await query.answer()
+
+    async def donate_2_of_2(self, state, query):
+        amount = float(query.data.split('_')[1])
+        await state.update_data(amount=amount)
+
+        # Remove messages from previous state
+        await self.remove_state_messages(state)
+
+        # Set new state and provide donation address
+        await DonateStates.confirmation.set()
+        await state.update_data(address=Tipbot.DONATION_ADDRESS)
+
+        data = await state.get_data()
+        amount = tools.num_as_str(data['amount'])
+
+        # Prepare confirmation string and keyboard
+        confirmation_string = f" ☑️ Confirm your donation:\n\n" \
+                              f"`▪️ Donate {amount}  EPIC to developer`"
+
+        confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+        confirmation_keyboard.row(
+            InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_withdraw'),
+            InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
+            )
+
+        # Send confirmation keyboard
+        confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
+
+        # Save message to remove to temp storage
+        await state.update_data(msg_confirmation=confirmation)
+
+    async def send_tip_cmd(self, message):
+        """
+        Parse user tip command and prepare tip transaction data,
+        manage user feedback during process
+        :param message:
+        :return:
+        """
+        fail_errors = 0
+        active_chat = message.chat.id
+        success_receivers = []
+
+        # Remove potential double white space from message text
+        message.text = message.text.replace('  ', ' ')
+
+        # Parse receivers
+        registered, unknown = self.get_receivers(message)
+
+        # Handle no receivers case, display feedback as self-delete message
+        if not registered and not unknown:
+            await self.tip_invalid_receiver_handler(message)
+            return
+
+        # Handle no registered receivers case, display feedback in active chat
+        if unknown and not registered:
+            await self.tip_no_receiver_handler(message)
+            return
+
+        # Handle case when tip command have wrong syntax
+        if len(message.text.split(' ')) - (len(registered) + len(unknown)) != 2:
+            logger.warning(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - Wrong tip command syntax: '{message.text}'")
+            return
+
+        params = {
+            'sender': self.owner,
+            'receivers': registered,
+            'amount': self.get_amount(message),
+            }
+
+        # Show that transaction is processed
+        await self.delete_message(message)
+        edited_message = await self.send_message(text=f"⌛️ {message.text}", chat_id=active_chat, message=message)
+
+        # API Call to send tip transaction
+        response = await self.owner.vite_wallet.send_tip(params, edited_message)
+
+        # Handle response error
+        if response['error']:
+            logger.error(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - {response['msg']}")
+            await self.send_message(text=f"🟡 {response['msg']}")
+            await self.tip_error_handler(edited_message)
+            return
+
+        # Handle success tip transaction
+        logger.info(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - {response['msg']}")
+        amount = tools.num_as_str(params['amount'])
+
+        # Iterate trough receivers/transactions
+        for i, tx in enumerate(response['data']):
+            receiver = params['receivers'][i]
+
+            if tx['error']:
+                # Send tx error to the sender's chat
+                if not params['sender'].is_bot:
+                    await self.send_message(text=f"🟡  {tx['msg']}", chat_id=params['sender'].id)
+
+                    if not fail_errors:
+                        await self.tip_error_handler(edited_message)
+                        fail_errors += 1
+
+            else:
+                success_receivers.append(receiver)
+                explorer_url = self.owner.vite_wallet.get_explorer_tx_url(tx['data']['hash'])
+                private_msg = f"✅ Tipped `{amount} EPIC (+{str(Fees.get_tip_fee(amount))} fee)` to {receiver.get_url()} \n▪️️ [Tip details]({explorer_url})"
+                receiver_msg = f"💸 `{amount} EPIC` from {params['sender'].get_url()}"
+
+                # Send tx confirmation to sender's private chat
+                if not params['sender'].is_bot:
+                    await self.send_message(text=private_msg, chat_id=params['sender'].id)
+
+                # Run threading process to update the receiver's balance
+                if not params['receivers'][i].is_bot:
+                    logger.warning(f"{receiver} ViteWallet::gui::send_tip() - start balance update")
+                    threading.Thread(target=receiver.vite_wallet.update_balance).start()
+
+                    # Send notification to receiver's private chat
+                    await self.send_message(text=receiver_msg, chat_id=receiver.id)
+
+        # Finalize with final feedback
+        if len(success_receivers) > 1:
+            public_msg = f"🎉️ {params['sender'].get_url()} multi-tipped `{amount} EPIC` to:\n" \
+                         f" {', '.join([receiver.get_url() for receiver in success_receivers])}"
+        elif len(success_receivers) > 0:
+            public_msg = f"❤️ {params['sender'].get_url()} tipped `{amount} EPIC` to {params['receivers'][0].get_url()}"
+        else:
+            public_msg = f""
+
+        # Remove sender /tip message
+        try:
+            await self.delete_message(edited_message)
+        except:
+            pass
+
+        # Send notification with tip confirmation in active channel
+        await self.send_message(text=public_msg, chat_id=active_chat, message=message)
+
+    async def register_alias(self, message: types.Message):
+        alias_title, address = message.text.split(' ')[1:3]
+
+        try:
+            print(message.text.split('"')[1])
+            details = eval(message.text.split('"')[1])
+        except:
+            details = {}
+
+        # Handle owner
+        owner = self.owner
+
+        if 'owner' in details:
+            owner_ = self.owner.from_dict({'username': details['owner'].replace('@', '')})
+            if owner_.is_registered:
+                owner = owner_
+
+        # Create a new alias
+        alias = self.owner.alias_wallet(title=alias_title, owner=owner, address=address, details=details)
+
+        # Update object params to database
+        response = alias.register()
+
+        try:
+            # Handle error
+            if response['error']:
+                msg = f"🟡 Alias registration failed, {response['msg']}"
+            else:
+                msg = f"✅ Alias #{alias.title}:{alias.short_address()} created successfully!"
+        except Exception as e:
+            logger.error(f"main::create_account_alias() -> {str(e)}")
+            msg = f"🟡 New alias registration failed."
+
+        await self.send_message(text=msg, chat_id=message.chat.id, parse_mode=HTML)
+
+    async def alias_details(self, message: types.Message):
+        # Parse user text and prepare params
+        cmd, alias_title = message.text.split(' ')
+
+        # API call to database to get AccountAlias by #alias
+        alias = self.owner.alias_wallet(title=alias_title).get()
+
+        if not alias: return
+
+        balance = alias.balance()
+
+        if balance:
+            balance_, pending = tools.parse_vite_balance(balance)
+        else:
+            pending = 0
+            balance_ = {'EPIC': 0}
+
+        if 'owner' in alias.details:
+            owner = alias.details['owner']
+        else:
+            owner = ''
+
+        pending = f"  <code>{pending} pending tx</code>\n" if pending else ""
+        title = f"🚦 #{alias.title}\n"
+        separ = f"{'=' * len(title)}\n"
+        value = f"💰  {tools.num_as_str(balance_['EPIC'])} EPIC\n"
+        owner = f"👤  {owner}\n"
+        link = f"➡️  {alias.details['url'].replace('https://', '')}" if 'url' in alias.details else ''
+
+        text = f"<b>{title}{separ}{value}</b>{pending}{owner}{link}"
+        await self.send_message(text=text, chat_id=message.chat.id, parse_mode=HTML, message=message)
 
     def get_receivers(self, message: types.Message) -> tuple:
         """
@@ -328,419 +818,16 @@ class Interface:
 
         return None
 
-    async def withdraw_1_of_3(self, state, query):
-        # Set new state
-        await WithdrawStates.ask_for_address.set()
-
-        # Ask user for address
-        text = '📩 Provide address to withdraw:'
-        ask_for_address = await query.message.reply(text=text, reply=False, reply_markup=self.cancel_keyboard())
-        # Save message to remove to temp storage
-        await state.update_data(msg_ask_for_address=ask_for_address)
-        await query.answer()
-
-    async def withdraw_2_of_3(self, state, message):
-        # Extract address from user message
-        address = message.text.strip()
-
-        # Validate withdraw address and save to storage
-        if self.owner.vite_wallet.is_valid_address(address):
-            await state.update_data(address=address)
-
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-
-            # Set new state
-            await WithdrawStates.ask_for_amount.set()
-
-            # Send message about amount
-            text = '💵 How much to withdraw?'
-            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
-        else:
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-
-            # Send invalid amount message
-            text = '🔸 Invalid withdraw address, try again:'
-            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
-
-        # Save message to remove to temp storage
-        await state.update_data(msg_ask_for_amount=ask_for_amount)
-
-    async def withdraw_3_of_3(self, state, message):
-        # Extract amount from user message
-        amount = message.text.strip()
-
-        try:
-            # Validate and save amount
-            amount = float(amount)
-            await state.update_data(amount=amount)
-
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-
-            # Set new state
-            await WithdrawStates.confirmation.set()
-            data = await state.get_data()
-            amount = tools.float_to_str(data['amount'])
-
-            confirmation_string = f" ☑️ Confirm your withdraw request:\n\n" \
-                                  f"`▪️ Withdraw {amount} EPIC (+{str(ViteFee.WITHDRAW)} fee) to:`\n" \
-                                  f"`{data['address']}`\n"
-
-            confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
-
-            confirmation_keyboard.row(
-                InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_withdraw'),
-                InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
-                )
-
-            # Send confirmation keyboard
-            confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
-
-            # Save message to remove to temp storage
-            await state.update_data(msg_confirmation=confirmation)
-
-        except Exception as e:
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-            logger.error(f"GUI::withdraw_3_of_3() - amount {e}")
-
-            # Send wrong amount message
-            text = '🔸 Wrong amount, try again'
-            confirmation = await self.send_message(text=text)
-
-            # Save message to remove to temp storage
-            await state.update_data(msg_confirmation=confirmation)
-
-    async def send_to_user_1_of_3(self, state, query):
-        # Set new state
-        await SendStates.ask_for_recipient.set()
-
-        # Ask user for recipient
-        text = '📩 Provide receiver @username'
-        ask_for_recipient = await query.message.reply(text=text, reply=False, reply_markup=self.cancel_keyboard())
-
-        # Save message to remove to temp storage
-        await state.update_data(msg_ask_for_recipient=ask_for_recipient)
-        await query.answer()
-
-    async def send_to_user_2_of_3(self, state, message):
-        # Validate recipient and save to storage
-        recipients, unknown = self.get_receivers(message)
-
-        if recipients:
-            await state.update_data(recipients=recipients[0].params())
-
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-
-            # Set new state
-            await SendStates.ask_for_amount.set()
-
-            # Send message about amount
-            text = '💵 How much to send?'
-            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
-        else:
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-
-            # Send invalid amount message
-            text = '🔸 Invalid recipient, try again:'
-            ask_for_amount = await self.send_message(text=text, reply_markup=self.cancel_keyboard())
-
-        # Save message to remove to temp storage
-        await state.update_data(msg_ask_for_amount=ask_for_amount)
-
-    async def send_to_user_3_of_3(self, state, message):
-        # Extract amount from user message
-        amount = message.text.strip()
-
-        try:
-            # Validate and save amount
-            amount = float(amount)
-            await state.update_data(amount=amount)
-
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-
-            # Set new state
-            await SendStates.confirmation.set()
-
-            data = await state.get_data()
-            amount = tools.float_to_str(data['amount'])
-            confirmation_string = \
-                f"☑️ Confirm your send request:\n\n`▪️ Send {amount} EPIC (+{str(ViteFee.get_tip_fee(amount))} fee) to {data['recipients']['mention']}`"
-            confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
-
-            confirmation_keyboard.row(
-                InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_send'),
-                InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
-                )
-
-            # Send confirmation keyboard
-            confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
-
-            # Save message to remove to temp storage
-            await state.update_data(msg_confirmation=confirmation)
-
-        except Exception as e:
-            # Remove messages from previous state
-            await self.remove_state_messages(state)
-            logger.error(f"GUI::send_to_user_3_of_3() - amount {e}")
-
-            # Send wrong amount message
-            confirmation = await self.send_message(text='🔸 Wrong amount, try again')
-
-            # Save message to remove to temp storage
-            await state.update_data(msg_confirmation=confirmation)
-
-    async def show_deposit(self, query=None):
-        vite_deposit = self.owner.vite_wallet.deposit()
-        epic_deposit = self.owner.epic_wallet.config.epicbox_address
-
-        if not vite_deposit['error']:
-            msg = f"👤  *Your ID & Username:*\n" \
-                  f"`{self.owner.id}`  &  `{self.owner.mention}`\n\n" \
-                  f"🏷  *VITE Network Deposit Address:*\n" \
-                  f"`{vite_deposit['data']}`\n\n" \
-                  f"🏷  *EPIC Network Deposit Address:*\n" \
-                  f"`{epic_deposit}`\n\n"
-
-        else:
-            msg = f"🟡 Wallet error (deposit address)"
-            logger.error(f"interface::show_deposit() - {self.owner.mention}: {vite_deposit['msg']}")
-
-        keyboard = InlineKeyboardMarkup()
-        button = InlineKeyboardButton(text='📩 Start Epicbox Deposit', callback_data='epicbox_deposit')
-        keyboard.add(button)
-
-        await self.send_message(text=msg, parse_mode=MD, reply_markup=keyboard)
-
-        # Handle proper Telegram Query closing
-        if query:
-            await query.answer()
-
-    async def epicbox_updater(self):
-        keyboard = InlineKeyboardMarkup()
-        button = InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_epicbox_deposit')
-        keyboard.add(button)
-
-        return await self.send_message(text=f"⏳ Waiting for deposit..", reply_markup=keyboard)
-
-    async def donate_1_of_2(self, state, query):
-        # Set new state
-        await DonateStates.ask_for_amount.set()
-
-        # Send message about amount
-        text = '💵 How much you would like to donate?'
-        ask_for_amount = await self.send_message(text=text, reply_markup=self.donate_keyboard())
-
-        # Save message to remove to temp storage
-        await state.update_data(msg_ask_for_amount=ask_for_amount)
-        await query.answer()
-
-    async def donate_2_of_2(self, state, query):
-        amount = float(query.data.split('_')[1])
-        await state.update_data(amount=amount)
-
-        # Remove messages from previous state
-        await self.remove_state_messages(state)
-
-        # Set new state and provide donation address
-        await DonateStates.confirmation.set()
-        await state.update_data(address=Tipbot.DONATION_ADDRESS)
-
-        data = await state.get_data()
-        amount = tools.float_to_str(data['amount'])
-
-        # Prepare confirmation string and keyboard
-        confirmation_string = f" ☑️ Confirm your donation:\n\n" \
-                              f"`▪️ Donate {amount}  EPIC to developer`"
-
-        confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
-        confirmation_keyboard.row(
-            InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_withdraw'),
-            InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
-            )
-
-        # Send confirmation keyboard
-        confirmation = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
-
-        # Save message to remove to temp storage
-        await state.update_data(msg_confirmation=confirmation)
-
-    async def register_alias(self, message: types.Message):
-        alias_title, address = message.text.split(' ')[1:3]
-
-        try:
-            print(message.text.split('"')[1])
-            details = eval(message.text.split('"')[1])
-        except:
-            details = {}
-
-        # Handle owner
-        owner = self.owner
-
-        if 'owner' in details:
-            owner_ = self.owner.from_dict({'username': details['owner'].replace('@', '')})
-            if owner_.is_registered:
-                owner = owner_
-
-        # Create a new alias
-        alias = self.owner.alias_wallet(title=alias_title, owner=owner, address=address, details=details)
-
-        # Update object params to database
-        response = alias.register()
-
-        try:
-            # Handle error
-            if response['error']:
-                msg = f"🟡 Alias registration failed, {response['msg']}"
-            else:
-                msg = f"✅ Alias #{alias.title}:{alias.short_address()} created successfully!"
-        except Exception as e:
-            logger.error(f"main::create_account_alias() -> {str(e)}")
-            msg = f"🟡 New alias registration failed."
-
-        await self.send_message(text=msg, chat_id=message.chat.id, parse_mode=HTML)
-
-    async def alias_details(self, message: types.Message):
-        # Parse user text and prepare params
-        cmd, alias_title = message.text.split(' ')
-
-        # API call to database to get AccountAlias by #alias
-        alias = self.owner.alias_wallet(title=alias_title).get()
-
-        if not alias: return
-
-        balance = alias.balance()
-
-        if balance:
-            balance_, pending = tools.parse_vite_balance(balance)
-        else:
-            pending = 0
-            balance_ = {'EPIC': 0}
-
-        if 'owner' in alias.details:
-            owner = alias.details['owner']
-        else:
-            owner = ''
-
-        pending = f"  <code>{pending} pending tx</code>\n" if pending else ""
-        title = f"🚦 #{alias.title}\n"
-        separ = f"{'=' * len(title)}\n"
-        value = f"💰  {tools.float_to_str(balance_['EPIC'])} EPIC\n"
-        owner = f"👤  {owner}\n"
-        link = f"➡️  {alias.details['url'].replace('https://', '')}" if 'url' in alias.details else ''
-
-        text = f"<b>{title}{separ}{value}</b>{pending}{owner}{link}"
-        await self.send_message(text=text, chat_id=message.chat.id, parse_mode=HTML, message=message)
-
-    async def send_tip_cmd(self, message):
-        """
-        Parse user tip command and prepare tip transaction data,
-        manage user feedback during process
-        :param message:
-        :return:
-        """
-        fail_errors = 0
-        active_chat = message.chat.id
-        success_receivers = []
-
-        # Remove potential double white space from message text
-        message.text = message.text.replace('  ', ' ')
-
-        # Parse receivers
-        registered, unknown = self.get_receivers(message)
-
-        # Handle no receivers case, display feedback as self-delete message
-        if not registered and not unknown:
-            await self.tip_invalid_receiver_handler(message)
-            return
-
-        # Handle no registered receivers case, display feedback in active chat
-        if unknown and not registered:
-            await self.tip_no_receiver_handler(message)
-            return
-
-        # Handle case when tip command have wrong syntax
-        if len(message.text.split(' ')) - (len(registered) + len(unknown)) != 2:
-            logger.warning(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - Wrong tip command syntax: '{message.text}'")
-            return
-
-        params = {
-            'sender': self.owner,
-            'receivers': registered,
-            'amount': self.get_amount(message),
-            }
-
-        # Show that transaction is processed
-        await self.delete_message(message)
-        edited_message = await self.send_message(text=f"⌛️ {message.text}", chat_id=active_chat, message=message)
-
-        # API Call to send tip transaction
-        response = await self.owner.vite_wallet.send_tip(params, edited_message)
-
-        # Handle response error
-        if response['error']:
-            logger.error(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - {response['msg']}")
-            await self.send_message(text=f"🟡 {response['msg']}")
-            await self.tip_error_handler(edited_message)
-            return
-
-        # Handle success tip transaction
-        logger.info(f"{self.owner.mention} ViteWallet::gui::send_tip_cmd() - {response['msg']}")
-        amount = tools.float_to_str(params['amount'])
-
-        # Iterate trough receivers/transactions
-        for i, tx in enumerate(response['data']):
-            receiver = params['receivers'][i]
-
-            if tx['error']:
-                # Send tx error to the sender's chat
-                if not params['sender'].is_bot:
-                    await self.send_message(text=f"🟡  {tx['msg']}", chat_id=params['sender'].id)
-
-                    if not fail_errors:
-                        await self.tip_error_handler(edited_message)
-                        fail_errors += 1
-
-            else:
-                success_receivers.append(receiver)
-                explorer_url = self.owner.vite_wallet.get_explorer_tx_url(tx['data']['hash'])
-                private_msg = f"✅ Tipped `{amount} EPIC (+{str(ViteFee.get_tip_fee(amount))} fee)` to {receiver.get_url()} \n▪️️ [Tip details]({explorer_url})"
-                receiver_msg = f"💸 `{amount} EPIC` from {params['sender'].get_url()}"
-
-                # Send tx confirmation to sender's private chat
-                if not params['sender'].is_bot:
-                    await self.send_message(text=private_msg, chat_id=params['sender'].id)
-
-                # Run threading process to update the receiver's balance
-                if not params['receivers'][i].is_bot:
-                    logger.warning(f"{receiver} ViteWallet::gui::send_tip() - start balance update")
-                    threading.Thread(target=receiver.vite_wallet.update_balance).start()
-
-                    # Send notification to receiver's private chat
-                    await self.send_message(text=receiver_msg, chat_id=receiver.id)
-
-        # Finalize with final feedback
-        if len(success_receivers) > 1:
-            public_msg = f"🎉️ {params['sender'].get_url()} multi-tipped `{amount} EPIC` to:\n" \
-                         f" {', '.join([receiver.get_url() for receiver in success_receivers])}"
-        elif len(success_receivers) > 0:
-            public_msg = f"❤️ {params['sender'].get_url()} tipped `{amount} EPIC` to {params['receivers'][0].get_url()}"
-        else:
-            public_msg = f""
-
-        # Remove sender /tip message
-        try:
-            await self.delete_message(edited_message)
-        except:
-            pass
-
-        # Send notification with tip confirmation in active channel
-        await self.send_message(text=public_msg, chat_id=active_chat, message=message)
+    async def deposit_message_updater(self, message, keyboard):
+        seconds = 180
+
+        while seconds and self.state.get(key=f"{self.owner.id}_updater"):
+            seconds -= 1
+            text = message.text.split(' ')
+            text[4] = str(seconds)
+            text = ' '.join(text)
+            await message.edit_text(text=text, reply_markup=keyboard)
+            await asyncio.sleep(1)
 
     async def maintenance(self, message):
         text = f"⚙️ ⚠️ @EpicTipBot is under a maintenance, you will get notice when " \
@@ -819,18 +906,19 @@ class Interface:
         :return: InlineKeyboardMarkup instance (aiogram)
         """
 
-        buttons = ['deposit', 'withdraw', 'send', 'donate', 'support']
-        icons = ['↘ ', '↗️ ', '➡️ ', '❤️ ', '💬️ ']
+        buttons = ['refresh', 'deposit', 'withdraw', 'send', 'donate', 'support']
+        icons = ['🔄', '↘ ', '↗️ ', '➡️ ', '❤️ ', '💬️ ']
 
         buttons = [InlineKeyboardButton(
-            text=f"{icons[i]}{btn.capitalize()}", callback_data=self.callback.new(
+            text=f"{icons[i]} {btn.capitalize()} {'Wallet' if 'refresh' in btn else ''}", callback_data=self.callback.new(
                 action=btn, user=self.owner.id, username=self.owner.name))
             for i, btn in enumerate(buttons)]
 
         keyboard_inline = InlineKeyboardMarkup() \
-            .row(buttons[0], buttons[1]) \
-            .row(buttons[2], buttons[3]) \
-            .add(buttons[4])
+            .row(buttons[0]) \
+            .row(buttons[1], buttons[2]) \
+            .row(buttons[3], buttons[4]) \
+            .add(buttons[5])
 
         return keyboard_inline
 
@@ -863,14 +951,16 @@ class Interface:
 
         return keyboard
 
-    async def cancel_state(self, state, query):
+    async def cancel_state(self, state, query=None):
         # Remove messages
         await self.remove_state_messages(state)
 
         # Reset state
         logger.info(f"{self.owner.username}: Reset state ({await state.get_state()}) and data")
         await state.reset_state(with_data=True)
-        await query.answer()
+
+        if query:
+            await query.answer()
 
     async def show_support(self, query):
         msg = f'🔘 Please join **@EpicTipBotSupport**'
