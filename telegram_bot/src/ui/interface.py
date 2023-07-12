@@ -58,6 +58,10 @@ class EpicWalletStates(StatesGroup):
     withdraw = State()
 
 
+class WalletSettingsStates(StatesGroup):
+    home = State()
+    outputs = State()
+
 class Interface:
     """
     Interface inside telegram chat to manage TipBot account.
@@ -195,7 +199,6 @@ class Interface:
 
         # EPIC Blockchain strings for GUI
         e_balance = self.owner.epic_wallet._cached_balance
-        print(e_balance.json())
         epic_vs_usd = storage.get(key='epic_vs_usd')
 
         if not e_balance.error:
@@ -205,7 +208,7 @@ class Interface:
                 details = ''
 
             e_in_usd = f"{round(e_balance.spendable * epic_vs_usd, 2)} USD" if epic_vs_usd else ''
-            e_balance = e_balance.spendable
+            e_balance = tools.num_as_str(e_balance.spendable)
         else:
             if e_balance.error and 'object has no' in e_balance.error:
                 e_balance = f"Create wallet first"
@@ -221,6 +224,70 @@ class Interface:
         # Update loading wallet GUI to ready wallet
         await wallet_gui.edit_text(text=wallet_gui_string, reply_markup=keyboard, parse_mode=MD)
         logger.info(f"{self.owner.mention}: wallet GUI loaded")
+
+    async def settings(self, state, query):
+        await WalletSettingsStates.home.set()
+
+        keyboard = InlineKeyboardMarkup()
+        network = InlineKeyboardButton(text='🌐️ Network', callback_data='network')
+        outputs = InlineKeyboardButton(text='🪙️ Outputs', callback_data='outputs')
+        close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
+        keyboard.row(outputs, network).row(close)
+
+        await self.send_message(text=self.screen.settings(), reply_markup=keyboard)
+
+    async def outputs(self, state, query):
+        message = await self.send_message(text=f"⏳ Processing..")
+
+        keyboard = InlineKeyboardMarkup()
+        outputs_5 = InlineKeyboardButton(text='Create 5', callback_data='create_5')
+        outputs_10 = InlineKeyboardButton(text='Create 10', callback_data='create_10')
+        close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
+        keyboard.row(outputs_5, outputs_10).row(close)
+
+        async with self.owner.epic_wallet.api_http_server as provider:
+            current_outputs = len(await provider.retrieve_outputs(refresh=False))
+
+        await state.update_data(current_outputs=current_outputs)
+        text = f"Wallet have `{current_outputs}` available outputs, you can add more:"
+        await message.edit_text(text=text, reply_markup=keyboard, parse_mode=MD)
+
+    async def create_new_outputs_1_of_2(self, state, query):
+        data = await state.get_data()
+        message = query.message
+        outputs_to_create = int(query.data.split('_')[1]) + data['current_outputs']
+        await state.update_data(outputs_to_create=outputs_to_create)
+
+        keyboard = InlineKeyboardMarkup()
+        confirm = InlineKeyboardButton(text=f'✅ Confirm', callback_data='confirm_new_outputs')
+        close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
+        keyboard.row(confirm, close)
+
+        message.edit_text(text="f⏳ Processing the request..", reply_markup=None)
+        if fees := await self.owner.epic_wallet.calculate_fees(amount=0.0001, num_change_outputs=outputs_to_create, selection_strategy_is_use_all=True):
+            print(fees)
+            text = f"☑️ Confirm your outputs request:\n\n" \
+                   f"▪️ Outputs creation fee: `{tools.num_as_str(fees)} EPIC`\n" \
+                   f"️▪️ New number of outputs: `{outputs_to_create}`"
+            await message.edit_text(text=text, reply_markup=keyboard, parse_mode=MD)
+        else:
+            text = f"⚠️ There was a problem with your request"
+            await message.edit_text(text=text)
+
+    async def create_new_outputs_2_of_2(self, state, query):
+        data = await state.get_data()
+        message = query.message
+        outputs_to_create = data['outputs_to_create']
+        await message.edit_text(text="f⏳ Processing the request..", reply_markup=None)
+
+        response = await self.owner.epic_wallet.create_outputs(outputs_to_create, refresh=False)
+
+        if not response:
+            await message.edit_text(text=f"⚠️ There was a problem with your request (is balance more than 0.0001?")
+        else:
+            await message.edit_text(text=f"✅ New outputs created successfully!")
+
+        await self.cancel_state(state, query)
 
     async def show_mnemonics(self):
         """Display link with the mnemonic seed phrase requested by the user"""
@@ -314,67 +381,115 @@ class Interface:
         # Get state data (withdraw network)
         data = await state.get_data()
 
-        # try:
-        # Remove messages from previous state
+        try:
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+
+            # Set new state depending on withdrawal network
+            if data['network'] == 'vite':
+                await WithdrawStates.withdraw.set()
+                callback_data = 'confirm_vite_withdraw'
+                tx_amount = user_amount + withdraw_fee
+                display_send = tools.num_as_str(user_amount + withdraw_fee)
+                display_rece = tools.num_as_str(user_amount)
+                tx_details_string = f"▪️ Network: `VITE (EPIC-002 Token)`\n" \
+                                    f"▪️ Sending: `{display_send} EPIC-002`\n" \
+                                    f"▪️ Receive: `{display_rece} EPIC-002`\n" \
+                                    f"▪️ Address: `{data['address']}`\n"
+                await state.update_data(amount=tools.num_as_str(tx_amount))
+
+            elif data['network'] == 'epic':
+                callback_data = 'confirm_epic_withdraw'
+                message = await self.send_message(text=f"⏳ Generating transaction..")
+
+                if tx_fee := await self.owner.epic_wallet.calculate_fees(tools.num_as_str(user_amount)):
+                    tx_amount = user_amount - tx_fee + withdraw_fee
+                    display_send = tools.num_as_str(user_amount + withdraw_fee)
+                    display_rece = tools.num_as_str(user_amount)
+                    tx_details_string = f"▪️ Network: `EPIC (via Epicbox)`\n" \
+                                        f"▪️ Sending: `{display_send} EPIC`\n" \
+                                        f"▪️ Receive: `{display_rece} EPIC`\n" \
+                                        f"▪️ Address: `{tools.short_epicbox_addr(data['address'])}`\n"
+                    await state.update_data(amount=tools.num_as_str(tx_amount))
+                    await self.delete_message(message)
+
+                else:
+                    await self.delete_message(message)
+                    raise Exception("⚠️ Not enough funds for the amount, try again:")
+
+                await EpicWalletStates.withdraw.set()
+            else:
+                return
+
+            keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+            keyboard.row(
+                InlineKeyboardButton(text=f'✅ Confirm', callback_data=callback_data),
+                InlineKeyboardButton(text='✖️ Cancel', callback_data='close_any')
+                )
+
+            # Send confirmation keyboard
+            text = f"☑️ Confirm your withdraw request:\n\n" + tx_details_string
+            withdraw = await self.send_message(text=text, reply_markup=keyboard)
+
+            # Save message to remove to temp storage
+            await state.update_data(msg_withdraw=withdraw, tx_details_string=tx_details_string)
+
+        except Exception as e:
+            # Remove messages from previous state
+            await self.remove_state_messages(state)
+            logger.error(f"GUI::withdraw_3_of_3() - amount {e}")
+
+            # Send wrong amount message
+            if "Not enough funds" in str(e):
+                text = str(e)
+            else:
+                text = '🔸 Wrong amount, try again:'
+            confirmation = await self.send_message(text=text)
+
+            # Save message to remove to temp storage
+            await state.update_data(msg_confirmation=confirmation)
+
+    async def finalize_epic_withdraw(self, state, query):
         await self.remove_state_messages(state)
+        data = await state.get_data()
+        amount = data['amount']
+        address = data['address']
+        message = data['msg_withdraw']
+        tx_details_string = data['tx_details_string']
+        text = f"⏳ Processing the transaction..\n\n" + tx_details_string
 
-        # Set new state depending on withdrawal network
-        if data['network'] == 'vite':
-            await WithdrawStates.withdraw.set()
-            callback_data = 'confirm_vite_withdraw'
-            tx_amount = user_amount + withdraw_fee
-            display_send = tools.num_as_str(user_amount + withdraw_fee)
-            display_rece = tools.num_as_str(user_amount)
-            confirmation_string = f" ☑️ Confirm your withdraw request:\n\n" \
-                                  f"▪️ Network: `VITE (EPIC-002 Token)`\n" \
-                                  f"▪️ Sending: `{display_send} EPIC`\n" \
-                                  f"▪️ Receive: `{display_rece} EPIC`\n" \
-                                  f"▪️ Address: `{data['address']}`\n"
-            await state.update_data(amount=tools.num_as_str(tx_amount))
+        message = await self.send_message(text=text)
+        transactions = await self.owner.epic_wallet.send_epicbox(amount, address=address, tx_type='withdraw', message=f"Withdraw from @EpicTipBot")
 
-        elif data['network'] == 'epic':
-            await EpicWalletStates.withdraw.set()
-            callback_data = 'confirm_epic_withdraw'
-            message = await self.send_message(text=f"⏳ Generating transaction..")
-            tx_fee = await self.owner.epic_wallet.calculate_fees(tools.num_as_str(user_amount))
-            tx_amount = user_amount - tx_fee + withdraw_fee
-            display_send = tools.num_as_str(user_amount + withdraw_fee)
-            display_rece = tools.num_as_str(user_amount)
-            confirmation_string = f" ☑️ Confirm your withdraw request:\n\n" \
-                                  f"▪️ Network: `Native EPIC (via Epicbox)`\n" \
-                                  f"▪️ Sending: `{display_send} EPIC`\n" \
-                                  f"▪️ Receive: `{display_rece} EPIC`\n" \
-                                  f"▪️ Address: `{data['address']}`\n"
-            await state.update_data(amount=tools.num_as_str(tx_amount))
-            await self.delete_message(message)
-        else:
-            return
+        keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
+        keyboard.row(InlineKeyboardButton(text='✖️ Close', callback_data='close_any'))
 
-        # Prepare and save amount
+        for tx in transactions['success']:
+            await query.answer(text='Transaction Confirmed!')
+            text = "✅ *Transaction sent successfully!*\n\n" + tx_details_string
+            text = text + f"\nℹ️ Remember to open your EPIC Wallet to receive the transaction, it should appear within 5-10 minutes."
+            await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+            await self.owner.epic_wallet.db.transactions.post(tx)
+            await asyncio.sleep(1)
 
-        confirmation_keyboard = InlineKeyboardMarkup(one_time_keyboard=True)
-        confirmation_keyboard.row(
-            InlineKeyboardButton(text=f'✅ Confirm', callback_data=callback_data),
-            InlineKeyboardButton(text='✖️ Cancel', callback_data='cancel_any')
-            )
+        for tx in transactions['failed']:
+            logger.warning(tx)
 
-        # Send confirmation keyboard
-        withdraw = await self.send_message(text=confirmation_string, reply_markup=confirmation_keyboard)
+            if "NotEnoughFunds" in tx['msg']:
+                data = eval(tx['msg'])['message']
+                data = eval(data.replace('NotEnoughFunds: ', ''))
+                available = tools.num_as_str(data['available_disp'])
+                needed = tools.num_as_str(data['needed_disp'])
+                text = f"⚠️ *Transaction failed*\n\nNot enough balance: `{available}`, needed `{needed}`."
+                await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
-        # Save message to remove to temp storage
-        await state.update_data(msg_withdraw=withdraw)
+            elif "is wallet api running under" in tx['msg']:
+                text = f"⚠️ *Transaction failed*\n\nTransaction wasn't success due to unknown error, please try again later."
+                await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
-        # except Exception as e:
-        #     # Remove messages from previous state
-        #     await self.remove_state_messages(state)
-        #     logger.error(f"GUI::withdraw_3_of_3() - amount {e}")
-        #
-        #     # Send wrong amount message
-        #     text = '🔸 Wrong amount, try again'
-        #     confirmation = await self.send_message(text=text)
-        #
-        #     # Save message to remove to temp storage
-        #     await state.update_data(msg_confirmation=confirmation)
+        # Finish withdraw state
+        await state.finish()
+        await query.answer()
 
     async def send_to_user_1_of_3(self, state, query):
         # Set new state
@@ -906,8 +1021,8 @@ class Interface:
         :return: InlineKeyboardMarkup instance (aiogram)
         """
 
-        buttons = ['refresh', 'deposit', 'withdraw', 'send', 'donate', 'support']
-        icons = ['🔄', '↘ ', '↗️ ', '➡️ ', '❤️ ', '💬️ ']
+        buttons = ['refresh', 'deposit', 'withdraw', 'send', 'donate', 'settings', 'support']
+        icons = ['🔄', '↘ ', '↗️ ', '➡️ ', '❤️ ', '⚙️', '💬️ ']
 
         buttons = [InlineKeyboardButton(
             text=f"{icons[i]} {btn.capitalize()} {'Wallet' if 'refresh' in btn else ''}", callback_data=self.callback.new(
@@ -918,7 +1033,7 @@ class Interface:
             .row(buttons[0]) \
             .row(buttons[1], buttons[2]) \
             .row(buttons[3], buttons[4]) \
-            .add(buttons[5])
+            .add(buttons[5], buttons[6])
 
         return keyboard_inline
 

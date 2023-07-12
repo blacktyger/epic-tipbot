@@ -1,4 +1,5 @@
 """Long Telegram strings"""
+from .. import tools
 from ..fees import Fees
 
 
@@ -8,6 +9,18 @@ LINE = "➖➖➖➖➖➖➖➖"
 VITE_T = "🔓 *VITE Blockchain*"
 EPIC_T = "🔐 *EPIC Blockchain*"
 
+SETTINGS_TITLE = "  ⚙️ * WALLET SETTINGS*"
+
+
+def settings():
+    return \
+        f"""
+{SETTINGS_TITLE}
+{LINE}
+▪️ *Outputs* - Manage your Wallet outputs
+▪️ *Network* - Manage Network settings
+{LINE}
+"""
 
 def vite_loading_wallet_1():
     return \
@@ -47,7 +60,7 @@ def epic_loading_wallet_1(*args):
 {TITLE}
 {LINE}
 {VITE_T}
-🪙  `{args[0]}`  *EPIC*
+🪙  `{args[0]} EPIC-002`
 💲  `{args[1]}` 
 {LINE}
 {EPIC_T}
@@ -63,7 +76,7 @@ def epic_loading_wallet_2(*args):
 {TITLE}
 {LINE}
 {VITE_T}
-🪙  `{args[0]}`  *EPIC*
+🪙  `{args[0]} EPIC-002`
 💲  `{args[1]}` 
 {LINE}
 {EPIC_T}
@@ -154,10 +167,10 @@ def ready_wallet(*args):
         epic_balance_1 = f"🟡 `{args[2]}`"
         epic_balance_2 = args[3]
     elif args[4]:
-        epic_balance_1 = f"🪙  `{args[2]}`  *EPIC*"
+        epic_balance_1 = f"🪙  `{args[2]} EPIC` (pending)"
         epic_balance_2 = f"💲  `{args[3]}`"
     else:
-        epic_balance_1 = f"🪙  `{args[2]}`  *EPIC*"
+        epic_balance_1 = f"🪙  `{args[2]} EPIC`"
         epic_balance_2 = f"💲  `{args[3]}`"
 
     return \
@@ -165,7 +178,7 @@ def ready_wallet(*args):
 {TITLE}
 {LINE}
 {VITE_T}
-🪙  `{args[0]}`  *EPIC*
+🪙  `{args[0]} EPIC-002`
 💲  `{args[1]}`                 
 {LINE}
 {EPIC_T}
@@ -179,9 +192,9 @@ def epic_balance_details(balance):
     return \
 f"""🔍 *EPIC Balance Details*
 {LINE}
-Available: `{balance.spendable}`
-Pending: `{balance.pending + balance.to_finalize}`
-Locked: `{balance.locked}`
+Available: `{tools.num_as_str(balance.spendable)} EPIC`
+Pending: `{tools.num_as_str(balance.pending + balance.to_finalize)} EPIC`
+Locked: `{tools.num_as_str(balance.locked)} EPIC`
 
 Outputs: `{balance.outputs}`
 {LINE}

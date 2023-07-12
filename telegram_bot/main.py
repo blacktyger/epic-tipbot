@@ -92,6 +92,13 @@ async def handle_withdraw_amount(message: types.Message, state: FSMContext):
     await owner.ui.withdraw_3_of_3(state=state, message=message)
 
 
+# /------ WALLET SETTINGS HANDLE ------\ #
+@dp.callback_query_handler(ui.wallet_cb.filter(action='settings'), state='*')
+async def gui_deposit(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+    owner = TipBotUser(id=callback_data['user'])
+    await owner.ui.settings(state=state, query=query)
+
+
 # /------ START/HELP HANDLE ------\ #
 @dp.message_handler(commands=COMMANDS['start'])
 async def start(message: types.Message):
@@ -154,7 +161,7 @@ async def on_startup(*args):
 async def on_shutdown(*args):
     # Close Django database session
     session = await database.get_client_session()
-    session.close()
+    await session.close()
 
 
 # /------ START MAIN LOOP ------\ #

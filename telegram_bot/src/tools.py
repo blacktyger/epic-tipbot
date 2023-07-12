@@ -170,6 +170,11 @@ async def fee_wallet_update(mnemonics: str, address_id: str | int):
         await asyncio.sleep(60)
 
 
+def short_epicbox_addr(address: str):
+    parts = address.split('@')
+    return f"{parts[0][:5]}...{parts[0][-5:]}@{parts[1]}"
+
+
 def num_as_str(f: float | int | str | Decimal) -> str:
     """
     Convert the given float to a string,
@@ -177,9 +182,13 @@ def num_as_str(f: float | int | str | Decimal) -> str:
     """
     f = str(f)
     try:
-        d1 = ctx.create_decimal(f).quantize(Decimal(1) / (10 ** Decimal(8))).normalize(ctx)
+        d1 = ctx.create_decimal(f).quantize(Decimal('.00000001')).normalize(ctx)
     except Exception:
         d1 = ctx.create_decimal(f).normalize(ctx)
+
+    if d1 % 1 == 0:
+        d1 = d1.quantize(Decimal('0.1'))
+
     return format(d1, 'f')
 
 

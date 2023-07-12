@@ -10,7 +10,7 @@ from aiogram import *
 from src.commands import COMMANDS
 from src import dp, tools, Database, storage, fees
 from src.user import TipBotUser
-from src.ui.interface import EpicWalletStates
+from src.ui.interface import EpicWalletStates, WalletSettingsStates
 
 """
 User actions:
@@ -56,10 +56,9 @@ async def send_tip(message: types.Message):
 
     for tx in transactions['success']:
         print(tx)
-        text = f"✅ Sent {tx['amount']} EPIC to {tx['receiver']['mention']}"
+        text = f"✅ `{tools.num_as_str(tx['amount'])} EPIC` sent to *{tx['receiver']['mention']}*"
         await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
         await owner.epic_wallet.db.transactions.post(tx)
-        # response = tools.api_call(query='save_transaction', url=Database.TIPBOT_URL, params=tx, method='post')
 
     for tx in transactions['failed']:
         print(tx)
@@ -105,43 +104,7 @@ async def cancel_epicbox_deposit(query: types.CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(text=['confirm_epic_withdraw'], state=EpicWalletStates.withdraw)
 async def withdraw(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.message.chat.id)
-
-    text = f"⏳ Processing the transaction.."
-    data = await state.get_data()
-    amount = data['amount']
-    address = data['address']
-    message = data['msg_withdraw']
-    await message.edit_text(text=text, reply_markup=None)
-
-    transactions = await owner.epic_wallet.send_epicbox(amount, address=address, tx_type='withdraw', message=f"Withdraw from @EpicTipBot")
-
-    for tx in transactions['success']:
-        await query.answer(text='Transaction Confirmed!')
-        text = f"✅ *Withdraw success*\n\n▪️ Open your EPIC Wallet to receive the transaction"
-        await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-        await owner.epic_wallet.db.transactions.post(tx)
-        await asyncio.sleep(1)
-
-    for tx in transactions['failed']:
-        print(tx)
-        receiver = tx['data']['address']
-
-        if "NotEnoughFunds" in tx['msg']:
-            print(tx['msg'])
-            data = eval(tx['msg'])['message']
-            data = eval(data.replace('NotEnoughFunds: ', ''))
-            available = float(data['available_disp'])
-            needed = float(data['needed_disp'])
-            text = f"⚠️ Failed to send EPIC to {receiver}:\nNot enough balance: `{available}`, needed `{needed}`."
-            await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-
-        elif "is wallet api running under" in tx['msg']:
-            text = f"⚠️ Failed to send EPIC to {receiver}."
-            await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
-
-    # Finish withdraw state
-    await state.finish()
-    await query.answer()
+    await owner.ui.finalize_epic_withdraw(state, query)
 
 
 @dp.message_handler(commands=['balance_details'], state='*')
@@ -155,6 +118,27 @@ async def balance_details(message: types.Message, state: FSMContext):
 
     await owner.ui.cancel_state(state)
     await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
+
+
+# /------ OUTPUTS HANDLE ------\ #
+@dp.callback_query_handler(text='outputs', state='*')
+async def outputs(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    await owner.ui.outputs(query=query, state=state)
+
+
+# /------ CREATE NEW OUTPUTS 1/2 HANDLE ------\ #
+@dp.callback_query_handler(text=['create_5', 'create_10'], state='*')
+async def create_new_outputs_1_of_2(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    await owner.ui.create_new_outputs_1_of_2(query=query, state=state)
+
+
+# /------ CREATE NEW OUTPUTS 2/2 HANDLE ------\ #
+@dp.callback_query_handler(text='confirm_new_outputs', state='*')
+async def create_new_outputs_2_of_2(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    await owner.ui.create_new_outputs_2_of_2(query=query, state=state)
 
 
 @dp.message_handler(commands=['send_epic2'], state='*')
@@ -192,3 +176,13 @@ async def get_txs(message: types.Message):
     async with owner.epic_wallet.api_http_server as provider:
         # pprint(provider.retrieve_txs(refresh=False))
         pprint(await provider.retrieve_txs(refresh=False))
+
+
+@dp.message_handler(commands=['check'], state='*')
+async def check_fee(message: types.Message):
+    owner = TipBotUser.from_obj(message.from_user)
+    # amount = owner.ui.get_amount(message)
+    # outputs = 5
+    # check = await owner.epic_wallet.calculate_fees(amount, num_change_outputs=outputs)
+    check = await owner.epic_wallet.create_outputs(2, refresh=False)
+    pprint(check)
