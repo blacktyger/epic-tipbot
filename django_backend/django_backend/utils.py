@@ -3,9 +3,9 @@ from cryptography.fernet import Fernet
 import json
 
 from .secrets import secret_links_login, secret_links_key, encryption_key
+from .settings import VITEX_ADAPTER_SCRIPT_PATH
 from vtm.models import Token, TelegramUser
 from .secret_links import OneTimeSecret
-from .settings import VITEX_ADAPTER_SCRIPT_PATH
 from .vite_adapter import ViteJsAdapter
 from tipbot.models import Wallet
 

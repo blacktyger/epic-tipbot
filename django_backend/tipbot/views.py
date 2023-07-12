@@ -130,13 +130,26 @@ def update_epic_transaction(request):
         payload = json.loads(request.body.decode('utf-8'))
         print(payload)
 
-        if transaction := Transaction.objects.filter(data__id=payload['tx_slate_id']).first():
-            transaction.status = payload['status']
-            transaction.data = payload['data']
-            transaction.save()
-            response = {'error': 0, 'msg': 'tx successfully updated', 'data': EpicTransactionSerializer(transaction).data}
+        if 'tx_slate_id' in payload:
+            if transaction := Transaction.objects.filter(data__id=payload['tx_slate_id']).first():
+                if 'data' in payload:
+                    transaction.data = payload['data']
+
+                transaction.status = payload['status']
+                transaction.save()
+                response = {'error': 0, 'msg': 'tx successfully updated', 'data': EpicTransactionSerializer(transaction).data}
+            else:
+                response = {'error': 1, 'msg': f"failed to get tx with id {payload['tx_slate_id']}", 'data': None}
+
+        elif 'outgoing_tx_slate_id' in payload:
+            if transaction := Transaction.objects.filter(data__outgoing_tx__id=payload['outgoing_tx_slate_id']).first():
+                transaction.status = payload['status']
+                transaction.save()
+                response = {'error': 0, 'msg': 'tx successfully updated', 'data': EpicTransactionSerializer(transaction).data}
+            else:
+                response = {'error': 1, 'msg': f"failed to get outgoing tx with id {payload['outgoing_tx_slate_id']}", 'data': None}
         else:
-            response = {'error': 1, 'msg': f"failed to get transaction with id {payload['tx_slate_id']}", 'data': None}
+            response = {'error': 1, 'msg': f" 'tx_slate_id' or 'outgoing_tx_slate_id' not provided", 'data': None}
 
         return JsonResponse(response)
 

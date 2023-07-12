@@ -87,7 +87,7 @@ class Transaction(models.Model):
     address = models.CharField(max_length=256, null=True, blank=True)
     amount = models.DecimalField(decimal_places=8, max_digits=32, null=True)
     type_of = models.CharField(max_length=16, null=True, blank=True)
-    status = models.CharField(max_length=10, default='pending')
+    status = models.CharField(max_length=64, default='pending')
     data = models.JSONField(default=dict)
     message = models.TextField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
