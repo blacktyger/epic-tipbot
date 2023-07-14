@@ -78,6 +78,13 @@ async def send_tip(message: types.Message):
             await message.edit_text(text=text, parse_mode=ParseMode.MARKDOWN)
 
 
+# /------ WALLET EPIC DEPOSIT STEP 2/2 ------\ #
+@dp.callback_query_handler(text='deposit_epic', state='*')
+async def epic_deposit(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    await owner.ui.show_epic_deposit(query=query, state=state)
+
+
 # /------ RUN EPICBOX DEPOSIT HANDLE ------\ #
 @dp.callback_query_handler(text='epicbox_deposit', state='*')
 async def epicbox_deposit(query: types.CallbackQuery, state: FSMContext):

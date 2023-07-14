@@ -7,6 +7,13 @@ from src.ui import *
 from src import dp
 
 
+# /------ WALLET VITE DEPOSIT STEP 2/2 ------\ #
+@dp.callback_query_handler(text='deposit_vite', state='*')
+async def vite_deposit(query: types.CallbackQuery, state: FSMContext):
+    owner = TipBotUser(id=query.from_user.id)
+    await owner.ui.show_vite_deposit(query=query, state=state)
+
+
 # /------ WALLET GUI WITHDRAW EPIC FINALIZE CALLBACK ------\ #
 @dp.callback_query_handler(text=['confirm_vite_withdraw'], state=[DonateStates.confirmation, WithdrawStates.withdraw])
 async def handle_withdraw_final(query: types.CallbackQuery, state: FSMContext):

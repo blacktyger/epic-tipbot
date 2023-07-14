@@ -62,6 +62,7 @@ class WalletSettingsStates(StatesGroup):
     home = State()
     outputs = State()
 
+
 class Interface:
     """
     Interface inside telegram chat to manage TipBot account.
@@ -264,7 +265,8 @@ class Interface:
         keyboard.row(confirm, close)
 
         message.edit_text(text="f⏳ Processing the request..", reply_markup=None)
-        if fees := await self.owner.epic_wallet.calculate_fees(amount=0.0001, num_change_outputs=outputs_to_create, selection_strategy_is_use_all=True):
+        if fees := await self.owner.epic_wallet.calculate_fees(amount=0.0001, num_change_outputs=outputs_to_create,
+                                                               selection_strategy_is_use_all=True):
             print(fees)
             text = f"☑️ Confirm your outputs request:\n\n" \
                    f"▪️ Outputs creation fee: `{tools.num_as_str(fees)} EPIC`\n" \
@@ -573,33 +575,60 @@ class Interface:
             # Save message to remove to temp storage
             await state.update_data(msg_confirmation=confirmation)
 
-    async def show_deposit(self, query=None):
+    async def deposit(self):
+        keyboard = InlineKeyboardMarkup()
+        epic = InlineKeyboardButton(text=f'EPIC Network', callback_data='deposit_epic')
+        vite = InlineKeyboardButton(text=f'VITE Network', callback_data='deposit_vite')
+        close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
+        text = f"🌐 Choose network (wallet) for the deposit"
+        keyboard.row(epic, vite).row(close)
+
+        await self.send_message(text=text, parse_mode=MD, reply_markup=keyboard)
+
+    async def show_vite_deposit(self, state, query):
         vite_deposit = self.owner.vite_wallet.deposit()
-        epic_deposit = self.owner.epic_wallet.config.epicbox_address
 
         if not vite_deposit['error']:
-            # msg = f"👤  *Your ID & Username:*\n" \
-            #       f"`{self.owner.id}`  &  `{self.owner.mention}`\n\n" \
-            msg = f"🏷  *VITE Network Deposit Address:*\n" \
-                  f"`{vite_deposit['data']}`\n\n" \
-                  f"🏷  *EPIC Network Deposit Address:*\n" \
-                  f"`{epic_deposit}`\n\n" \
-                  f"ℹ️ Click the button bellow BEFORE sending Native EPIC deposit transaction."
-
+            text = f"🏷  *VITE Network Deposit Address:*\n`{vite_deposit['data']}`"
         else:
-            msg = f"🟡 Wallet error (deposit address)"
+            text = f"🟡 Wallet error (deposit address)"
             logger.error(f"interface::show_deposit() - {self.owner.mention}: {vite_deposit['msg']}")
+
+        keyboard = InlineKeyboardMarkup()
+        close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
+        keyboard.row(close)
+
+        qr_code = tools.generate_qr(vite_deposit['data'])
+        media = types.MediaGroup()
+        media.attach_photo(types.InputFile(qr_code), parse_mode=MD)
+        qr_message = await bot.send_media_group(chat_id=self.owner.id, media=media)
+
+        await state.update_data(qr_message=qr_message[0])
+        await self.send_message(text=text, parse_mode=MD, reply_markup=keyboard)
+
+        # Handle proper Telegram Query closing
+        await query.answer()
+
+    async def show_epic_deposit(self, state, query):
+        epic_deposit = self.owner.epic_wallet.config.epicbox_address
+
+        text = f"🏷  *EPIC Network Deposit Address:*\n`{epic_deposit}`\n\n" \
+               f"ℹ️ Click the button bellow BEFORE sending Native EPIC deposit transaction."
 
         keyboard = InlineKeyboardMarkup()
         start = InlineKeyboardButton(text='📩 Start Epicbox Deposit', callback_data='epicbox_deposit')
         close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
         keyboard.row(start, close)
+        qr_code = tools.generate_qr(epic_deposit)
 
-        await self.send_message(text=msg, parse_mode=MD, reply_markup=keyboard)
+        media = types.MediaGroup()
+        media.attach_photo(types.InputFile(qr_code), parse_mode=MD)
+        qr_message = await bot.send_media_group(chat_id=self.owner.id, media=media)
+        await state.update_data(qr_message=qr_message[0])
+        await self.send_message(text=text, parse_mode=MD, reply_markup=keyboard)
 
         # Handle proper Telegram Query closing
-        if query:
-            await query.answer()
+        await query.answer()
 
     async def epicbox_deposit(self):
         keyboard = InlineKeyboardMarkup()

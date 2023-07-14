@@ -55,11 +55,11 @@ async def refresh(query: types.CallbackQuery, callback_data: dict, state: FSMCon
     await owner.ui.show_wallet(state)
 
 
-# /------ WALLET GUI DEPOSIT ADDRESS STEP 1/1 ------\ #
+# /------ WALLET GUI DEPOSIT STEP 1/2 ------\ #
 @dp.callback_query_handler(ui.wallet_cb.filter(action='deposit'), state='*')
-async def gui_deposit(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+async def deposit(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
     owner = TipBotUser(id=callback_data['user'])
-    await owner.ui.show_deposit(query=query)
+    await owner.ui.deposit()
 
 
 # /------ WALLET GUI WITHDRAW STEP 0/3 ------\ #
@@ -94,7 +94,7 @@ async def handle_withdraw_amount(message: types.Message, state: FSMContext):
 
 # /------ WALLET SETTINGS HANDLE ------\ #
 @dp.callback_query_handler(ui.wallet_cb.filter(action='settings'), state='*')
-async def gui_deposit(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
+async def settings(query: types.CallbackQuery, callback_data: dict, state: FSMContext):
     owner = TipBotUser(id=callback_data['user'])
     await owner.ui.settings(state=state, query=query)
 
@@ -124,6 +124,11 @@ async def cancel_any_state(query: types.CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(text='close_any', state='*')
 async def close_any_message(query: types.CallbackQuery, state: FSMContext):
     owner = TipBotUser(id=query.from_user.id)
+    data = await state.get_data()
+
+    if 'qr_message' in data:
+        await owner.ui.delete_message(data['qr_message'])
+
     await owner.ui.delete_message(query.message)
     await owner.ui.cancel_state(state=state, query=query)
 

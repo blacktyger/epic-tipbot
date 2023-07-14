@@ -108,20 +108,20 @@ class ViteWallet:
         time.sleep(0.5)
         response = self._api_call('send_transaction', tx, method='post', api_url=self.API_URL2)
 
+        re_try = 5
+
         if response['error']:
-            # Sometimes failed if tx is sent too fast
-            if 'calc PoW twice' in response['msg'] or 'verify prevBlock failed' in response['msg']:
+            # Sometimes tx is sent too fast, try `re_try` times before consider as failed
+            while ('calc PoW twice' in response['msg'] or 'verify prevBlock failed' in response['msg']) and re_try:
+                re_try -= 1
+                logger.error(f"ViteWallet()::_send_fee (re_try: {re_try}) - {self.owner.mention}: {response['msg']}")
                 time.sleep(1)
                 response = self._api_call('send_transaction', tx, method='post', api_url=self.API_URL2)
 
-                if response['error']:
-                    logger.error(f"ViteWallet()::_send_fee - {self.owner.mention}: {response['msg']}")
-                else:
+                if not response['error']:
                     logger.info(f"Fee({value}) from {self.owner.mention} sent")
-
-            else:
-                logger.error(f"ViteWallet()::_send_fee - {self.owner.mention}: {response['msg']}")
-
+                    break
+            logger.error(f"ViteWallet()::_send_fee - {self.owner.mention}: {response['msg']}")
         else:
             logger.info(f"Fee({value}) from {self.owner.mention} sent")
 

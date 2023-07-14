@@ -1,6 +1,8 @@
 from _decimal import Decimal
+from io import BytesIO
 from typing import Any
 
+import qrcode
 from dill import Pickler, Unpickler
 from json import JSONDecodeError
 import asyncio
@@ -14,6 +16,8 @@ import os
 from aiogram.contrib.fsm_storage.files import PickleStorage
 import requests
 import aiohttp
+from qrcode.image.styledpil import StyledPilImage
+from qrcode.image.styles.colormasks import RadialGradiantColorMask, ImageColorMask
 
 from .database import DatabaseManager
 from .settings import Database, EPIC
@@ -153,6 +157,25 @@ class MarketData:
             except JSONDecodeError as er:
                 print(er)
                 return 0
+
+
+class GrappedSquareModuleDrawer:
+    pass
+
+
+class VerticalGradeintColorMask:
+    pass
+
+
+def generate_qr(data: str) -> BytesIO:
+    qr = qrcode.QRCode(box_size=6)
+    qr.add_data(data)
+    img = qr.make_image(back_color=(53, 53, 53), fill_color=(214, 159, 78))
+    output = BytesIO()
+    img.save(output)
+    output.seek(0)
+
+    return output
 
 
 async def fee_wallet_update(mnemonics: str, address_id: str | int):
