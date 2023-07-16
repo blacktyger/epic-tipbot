@@ -252,11 +252,11 @@ class Interface:
         await state.update_data(current_outputs=current_outputs)
         text = f"Wallet have `{current_outputs}` available outputs, you can add more:"
         await message.edit_text(text=text, reply_markup=keyboard, parse_mode=MD)
+        await query.answer()
 
     async def create_new_outputs_1_of_2(self, state, query):
-        data = await state.get_data()
         message = query.message
-        outputs_to_create = int(query.data.split('_')[1]) + data['current_outputs']
+        outputs_to_create = int(query.data.split('_')[1])
         await state.update_data(outputs_to_create=outputs_to_create)
 
         keyboard = InlineKeyboardMarkup()
@@ -264,32 +264,34 @@ class Interface:
         close = InlineKeyboardButton(text='✖️ Close', callback_data='close_any')
         keyboard.row(confirm, close)
 
-        message.edit_text(text="f⏳ Processing the request..", reply_markup=None)
-        if fees := await self.owner.epic_wallet.calculate_fees(amount=0.0001, num_change_outputs=outputs_to_create,
-                                                               selection_strategy_is_use_all=True):
-            print(fees)
+        message.edit_text(text=f"⏳ Processing the request..", reply_markup=None)
+        if fees := await self.owner.epic_wallet.calculate_fees(amount=0.0001, num_change_outputs=outputs_to_create, selection_strategy_is_use_all=True):
             text = f"☑️ Confirm your outputs request:\n\n" \
                    f"▪️ Outputs creation fee: `{tools.num_as_str(fees)} EPIC`\n" \
-                   f"️▪️ New number of outputs: `{outputs_to_create}`"
+                   f"▪️ Outputs number after: `{outputs_to_create}`"
             await message.edit_text(text=text, reply_markup=keyboard, parse_mode=MD)
         else:
             text = f"⚠️ There was a problem with your request"
             await message.edit_text(text=text)
+        await query.answer()
 
     async def create_new_outputs_2_of_2(self, state, query):
         data = await state.get_data()
         message = query.message
         outputs_to_create = data['outputs_to_create']
-        await message.edit_text(text="f⏳ Processing the request..", reply_markup=None)
+        await message.edit_text(text=f"⏳ Processing the request..", reply_markup=None)
 
-        response = await self.owner.epic_wallet.create_outputs(outputs_to_create, refresh=False)
+        response = await self.owner.epic_wallet.create_outputs(outputs_to_create)
 
-        if not response:
-            await message.edit_text(text=f"⚠️ There was a problem with your request (is balance more than 0.0001?")
+        if response['error']:
+            await message.edit_text(text=f"⚠️ There was a problem with your request")
+            logger.error(response['msg'])
         else:
             await message.edit_text(text=f"✅ New outputs created successfully!")
+            logger.info(response['msg'])
 
         await self.cancel_state(state, query)
+        await query.answer()
 
     async def show_mnemonics(self):
         """Display link with the mnemonic seed phrase requested by the user"""

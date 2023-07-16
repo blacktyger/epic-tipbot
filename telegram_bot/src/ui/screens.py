@@ -196,7 +196,7 @@ Available: `{tools.num_as_str(balance.spendable)} EPIC`
 Pending: `{tools.num_as_str(balance.pending + balance.to_finalize)} EPIC`
 Locked: `{tools.num_as_str(balance.locked)} EPIC`
 
-Outputs: `{balance.outputs}`
+Outputs: `{len(balance.outputs)}`
 {LINE}
 """
 
